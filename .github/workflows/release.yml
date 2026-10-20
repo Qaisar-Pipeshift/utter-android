@@ -30,6 +30,7 @@ jobs:
           python3 -I scripts/check_manifest.py
           python3 -I scripts/check_battery_rules.py
           python3 -I scripts/check_resources.py
+          python3 -I scripts/check_kotlin_comments.py
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin

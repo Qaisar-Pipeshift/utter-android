@@ -52,7 +52,7 @@ import kotlinx.coroutines.withContext
 /**
  * "Share → Utter" for a voice note (docs/spec.md §17, docs/plan.md Task 15).
  *
- * Why a separate activity from the keyboard: WhatsApp and Telegram share `audio/*` URIs, which the IME never sees.
+ * Why a separate activity from the keyboard: WhatsApp and Telegram share audio URIs (any audio MIME type), which the IME never sees.
  * The file is read once with a hard 25 MB ceiling and its duration is checked before a single byte is uploaded, so a
  * long recording cannot cost a pointless upload; the transcript then offers the same four calm actions as history —
  * copy, share, clean, save.
