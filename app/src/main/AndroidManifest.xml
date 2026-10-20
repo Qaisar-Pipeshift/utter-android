@@ -67,8 +67,10 @@
         </activity>
 
         <!-- The Quick Settings tile's recorder; only this app starts it (docs/spec.md §17). -->
+        <!-- Rotation is handled in place so a turn of the phone never recreates the sheet mid-take. -->
         <activity
             android:name=".extras.QuickRecorderActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"

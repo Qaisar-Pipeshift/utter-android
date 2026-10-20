@@ -16,9 +16,20 @@ import javax.crypto.spec.GCMParameterSpec
  *
  * Only ciphertext and its IV are ever written to SharedPreferences. If the Keystore entry is gone (restore,
  * lock-screen reset, OEM bug) decryption fails closed: [load] returns null and records an event kind only.
+ *
+ * Why a memory cache: every take reads the config on the main thread, and a Keystore decrypt is slow enough to show
+ * as a stutter on the first chunk. The plaintext never outlives the process, is invalidated by [save] and [clear],
+ * and is never logged.
  */
 class SecretStore(context: Context, private val diag: Diag = Diag()) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /** The decrypted key, or null when there is none; [loaded] tells "not decrypted yet" apart from "no key". */
+    @Volatile
+    private var cached: String? = null
+
+    @Volatile
+    private var loaded = false
 
     fun save(key: String) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -28,11 +39,21 @@ class SecretStore(context: Context, private val diag: Diag = Diag()) {
             .putString(KEY_CIPHERTEXT, Base64.encodeToString(ciphertext, Base64.NO_WRAP))
             .putString(KEY_IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
             .apply()
+        cached = key
+        loaded = true
     }
 
     fun load(): String? {
-        val ciphertext = prefs.getString(KEY_CIPHERTEXT, null) ?: return null
-        val iv = prefs.getString(KEY_IV, null) ?: return null
+        cached?.let { return it }
+        if (loaded) return null
+        val ciphertext = prefs.getString(KEY_CIPHERTEXT, null) ?: run {
+            loaded = true
+            return null
+        }
+        val iv = prefs.getString(KEY_IV, null) ?: run {
+            loaded = true
+            return null
+        }
         return try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(
@@ -40,15 +61,21 @@ class SecretStore(context: Context, private val diag: Diag = Diag()) {
                 secretKey(),
                 GCMParameterSpec(TAG_BITS, Base64.decode(iv, Base64.NO_WRAP)),
             )
-            String(cipher.doFinal(Base64.decode(ciphertext, Base64.NO_WRAP)), Charsets.UTF_8)
+            val key = String(cipher.doFinal(Base64.decode(ciphertext, Base64.NO_WRAP)), Charsets.UTF_8)
+            cached = key
+            loaded = true
+            key
         } catch (failure: Exception) {
             diag.event("secret_unreadable", failure.javaClass.simpleName)
+            loaded = true
             null
         }
     }
 
     fun clear() {
         prefs.edit().remove(KEY_CIPHERTEXT).remove(KEY_IV).apply()
+        cached = null
+        loaded = true
     }
 
     private fun secretKey(): SecretKey {

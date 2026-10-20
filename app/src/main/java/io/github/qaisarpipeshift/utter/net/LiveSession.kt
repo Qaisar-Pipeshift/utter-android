@@ -118,7 +118,7 @@ internal class LiveSession(
         if (!sendFrame(LiveProtocol.COMMIT, audioChunk = false)) return
         scope.launch {
             delay(finalTimeoutMs)
-            fail(TIMEOUT)
+            fail(LiveProtocol.FAIL_TIMEOUT)
         }
     }
 
@@ -141,7 +141,7 @@ internal class LiveSession(
             if (finished || cancelled) return false
             if (!ready) {
                 if (audioChunk && queuedAudio >= MAX_QUEUED_CHUNKS) {
-                    fail(BACKLOG)
+                    fail(LiveProtocol.FAIL_BACKLOG)
                     return false
                 }
                 if (audioChunk) queuedAudio++
@@ -155,36 +155,45 @@ internal class LiveSession(
     private fun publish(event: LiveEvent) {
         if (cancelled) return
         synchronized(lock) {
-            if (queue.size >= QUEUE_CAPACITY) {
-                val previewIndex = queue.indexOfFirst { it is LiveEvent.Preview }
-                if (event is LiveEvent.Preview) {
-                    if (previewIndex < 0) return
-                    queue.removeAt(previewIndex)
-                } else if (previewIndex >= 0) {
-                    queue.removeAt(previewIndex)
-                } else {
-                    queue.removeFirst()
-                }
-            }
-            queue.addLast(event)
+            if (finished) return
+            enqueueLocked(event)
         }
         signal.trySend(Unit)
     }
 
-    private fun fail(why: String) {
-        synchronized(lock) {
-            if (finished || cancelled) return
+    private fun enqueueLocked(event: LiveEvent) {
+        if (queue.size >= QUEUE_CAPACITY) {
+            val previewIndex = queue.indexOfFirst { it is LiveEvent.Preview }
+            if (event is LiveEvent.Preview) {
+                if (previewIndex < 0) return
+                queue.removeAt(previewIndex)
+            } else if (previewIndex >= 0) {
+                queue.removeAt(previewIndex)
+            } else {
+                queue.removeFirst()
+            }
         }
-        publish(LiveEvent.Failed(why))
-        finish()
+        queue.addLast(event)
     }
 
-    private fun finish() {
+    private fun fail(why: String) {
+        terminate(LiveEvent.Failed(why))
+    }
+
+    /**
+     * Publishes the session's one terminal event and ends it in one atomic step.
+     *
+     * Why the flag and the event share the lock: publishing first and finishing afterwards let a collector that had
+     * already received the terminal event still see `send()` accepted, so a dead session kept taking audio. Every
+     * terminal path — Final, NoSpeech, Failed, timeout, backlog, close, transport failure — goes through here.
+     */
+    private fun terminate(event: LiveEvent) {
         synchronized(lock) {
-            if (finished) return
+            if (finished || cancelled) return
             finished = true
             outbox.clear()
             queuedAudio = 0
+            enqueueLocked(event)
         }
         socket?.close(CLOSE_NORMAL, null)
         signal.trySend(Unit)
@@ -193,7 +202,7 @@ internal class LiveSession(
 
     private val listener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            if (!webSocket.send(LiveProtocol.sessionUpdate(prompt = prompt))) fail("closed")
+            if (!webSocket.send(LiveProtocol.sessionUpdate(prompt = prompt))) fail(LiveProtocol.FAIL_CLOSED)
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
@@ -215,10 +224,7 @@ internal class LiveSession(
             when (val event = LiveProtocol.parse(text)) {
                 null -> Unit
                 is LiveEvent.Preview -> publish(event)
-                else -> {
-                    publish(event)
-                    finish()
-                }
+                else -> terminate(event)
             }
         }
 
@@ -227,11 +233,11 @@ internal class LiveSession(
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            fail("closed")
+            fail(LiveProtocol.FAIL_CLOSED)
         }
 
         override fun onFailure(webSocket: WebSocket, failure: Throwable, response: Response?) {
-            fail("connect")
+            fail(LiveProtocol.FAIL_CONNECT)
         }
     }
 
@@ -254,8 +260,6 @@ internal class LiveSession(
         const val MAX_QUEUED_CHUNKS = 50
         const val CLOSE_NORMAL = 1000
         const val SESSION_UPDATED = "session.updated"
-        const val BACKLOG = "backlog"
-        const val TIMEOUT = "final timeout"
         const val KIND_CONFIG = "config"
     }
 }

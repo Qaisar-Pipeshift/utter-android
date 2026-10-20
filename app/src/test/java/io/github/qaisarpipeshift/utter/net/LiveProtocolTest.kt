@@ -90,17 +90,20 @@ class LiveProtocolTest {
     }
 
     @Test
-    fun `any other error is a failure carrying the server message`() {
-        val event = LiveProtocol.parse("""{"type":"error","error":{"message":"model crashed"}}""")
-        assertEquals(LiveEvent.Failed("model crashed"), event)
+    fun `a server error becomes a fixed kind and never carries the server text`() {
+        // A real server message can hold ids, URLs or request data; Diagnostics and logcat must never see it.
+        val event = LiveProtocol.parse(
+            """{"type":"error","error":{"message":"model crashed at https://internal.example/?k=secret"}}""",
+        )
+        assertEquals(LiveEvent.Failed(LiveProtocol.FAIL_SERVER), event)
     }
 
     @Test
-    fun `transcription failed event is a failure`() {
+    fun `transcription failed event is a fixed kind`() {
         val event = LiveProtocol.parse(
             """{"type":"conversation.item.input_audio_transcription.failed","error":{"message":"decode"}}""",
         )
-        assertEquals(LiveEvent.Failed("decode"), event)
+        assertEquals(LiveEvent.Failed(LiveProtocol.FAIL_OTHER), event)
     }
 
     @Test

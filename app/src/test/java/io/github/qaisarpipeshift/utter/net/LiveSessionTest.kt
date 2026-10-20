@@ -88,7 +88,7 @@ class LiveSessionTest {
 
         val handle = api().openLive(null)
 
-        assertEquals(LiveEvent.Failed("boom"), collect(handle).last())
+        assertEquals(LiveEvent.Failed(LiveProtocol.FAIL_SERVER), collect(handle).last())
         assertFalse(handle.send(ByteArray(320)))
     }
 

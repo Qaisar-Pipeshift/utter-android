@@ -19,7 +19,10 @@ sealed interface LiveEvent {
     /** The server heard nothing (empty completion, or its "buffer too small" error after commit). */
     data object NoSpeech : LiveEvent
 
-    /** Protocol or transport failure; [why] is a short kind, never transcript text. */
+    /**
+     * Protocol or transport failure. [why] is one of the fixed kinds below — never server free text, which can carry
+     * URLs, ids or request data and ends up in Diagnostics and logcat.
+     */
     data class Failed(val why: String) : LiveEvent
 }
 
@@ -35,6 +38,14 @@ object LiveProtocol {
 
     const val COMMIT = """{"type":"input_audio_buffer.commit"}"""
     const val CLEAR = """{"type":"input_audio_buffer.clear"}"""
+
+    // The only strings LiveEvent.Failed may carry (privacy: no server text reaches Diagnostics).
+    const val FAIL_SERVER = "server_error"
+    const val FAIL_OTHER = "failed"
+    const val FAIL_CLOSED = "closed"
+    const val FAIL_CONNECT = "connect"
+    const val FAIL_BACKLOG = "backlog"
+    const val FAIL_TIMEOUT = "final timeout"
 
     private const val PREVIEW = "transcription.preview"
     private const val COMPLETED = "conversation.item.input_audio_transcription.completed"
@@ -82,14 +93,15 @@ object LiveProtocol {
                 if (transcript.isEmpty()) LiveEvent.NoSpeech else LiveEvent.Final(transcript)
             }
 
-            TRANSCRIPTION_FAILED -> LiveEvent.Failed(errorMessage(root))
+            // The server's message is inspected only to recognise a silent take; it is never carried onward.
+            TRANSCRIPTION_FAILED -> LiveEvent.Failed(FAIL_OTHER)
 
             "error" -> {
                 val message = errorMessage(root)
                 if (message.contains(BUFFER_TOO_SMALL, ignoreCase = true)) {
                     LiveEvent.NoSpeech
                 } else {
-                    LiveEvent.Failed(message)
+                    LiveEvent.Failed(FAIL_SERVER)
                 }
             }
 

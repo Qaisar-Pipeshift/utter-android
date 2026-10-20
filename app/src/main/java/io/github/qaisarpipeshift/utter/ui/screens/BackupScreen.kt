@@ -2,6 +2,7 @@ package io.github.qaisarpipeshift.utter.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -27,6 +28,7 @@ import io.github.qaisarpipeshift.utter.ui.UtterScreen
 import io.github.qaisarpipeshift.utter.ui.components.PillTone
 import io.github.qaisarpipeshift.utter.ui.components.SectionCard
 import io.github.qaisarpipeshift.utter.ui.components.StatusPill
+import io.github.qaisarpipeshift.utter.ui.theme.utterWarningColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -136,10 +138,34 @@ fun BackupScreen(graph: Graph, onBack: () -> Unit) {
 
     val summary = pendingImport
     if (summary != null) {
+        val newHost = summary.newHost
         AlertDialog(
             onDismissRequest = { pendingImport = null },
-            title = { Text(stringResource(R.string.backup_confirm_title)) },
-            text = { Text(stringResource(R.string.backup_confirm_body, summary.changed)) },
+            title = {
+                Text(
+                    stringResource(
+                        if (newHost != null) R.string.backup_confirm_server_title else R.string.backup_confirm_title,
+                    ),
+                )
+            },
+            text = {
+                Column {
+                    if (newHost != null) {
+                        // A changed host means the key would start going somewhere new: it must be impossible to
+                        // apply that by tapping the ordinary "Import" button out of habit.
+                        Text(stringResource(R.string.backup_confirm_server_body, summary.changed))
+                        Text(
+                            text = newHost,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = utterWarningColor(),
+                        )
+                        Text(stringResource(R.string.backup_confirm_server_note))
+                    } else {
+                        Text(stringResource(R.string.backup_confirm_body, summary.changed))
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -153,7 +179,11 @@ fun BackupScreen(graph: Graph, onBack: () -> Unit) {
                         }
                     },
                 ) {
-                    Text(stringResource(R.string.backup_apply))
+                    Text(
+                        stringResource(
+                            if (newHost != null) R.string.backup_apply_server else R.string.backup_apply,
+                        ),
+                    )
                 }
             },
             dismissButton = {

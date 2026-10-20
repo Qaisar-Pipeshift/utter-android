@@ -55,7 +55,11 @@ import io.github.qaisarpipeshift.utter.core.TakeAction
 import io.github.qaisarpipeshift.utter.core.TakeRequest
 import io.github.qaisarpipeshift.utter.ui.MainActivity
 import java.util.Locale
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -75,6 +79,17 @@ class QuickRecorderActivity : ComponentActivity() {
     private lateinit var controller: DictationController
     private val gate = MutableStateFlow<QuickGate>(QuickGate.Checking)
 
+    /**
+     * The controller's scope, owned by the activity rather than `lifecycleScope`: the stop-and-keep pass in
+     * [onDestroy] must not be cancelled by the very teardown that asked for it. A failure here becomes a Diagnostics
+     * event instead of a crash.
+     */
+    private val quickScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, failure ->
+            if (::graph.isInitialized) graph.diag.event("quick_error", failure.javaClass.simpleName)
+        },
+    )
+
     /** No app owns this take; the empty package lets it skip per-app rules while history gets a readable label. */
     private val quickField = FieldInfo(
         kind = FieldKind.TEXT,
@@ -90,7 +105,7 @@ class QuickRecorderActivity : ComponentActivity() {
         graph = (application as UtterApp).graph
         recorder = AndroidRecorder(this, { graph.settings.current() }, graph.diag)
         controller = DictationController(
-            scope = lifecycleScope,
+            scope = quickScope,
             settings = { graph.settings.current() },
             recorder = recorder,
             transcriber = graph.api,
@@ -150,9 +165,20 @@ class QuickRecorderActivity : ComponentActivity() {
         }
     }
 
+    override fun onStop() {
+        // The sheet is going away (not a rotation: the activity handles those in place). Stop the mic and run the
+        // take to the clipboard through the normal path; if that cannot finish, its audio stays pending for Retry.
+        if (::controller.isInitialized && !isChangingConfigurations) {
+            quickScope.launch { controller.onPanelHidden() }
+        }
+        super.onStop()
+    }
+
     override fun onDestroy() {
-        // The activity may close mid-take: release the mic now instead of waiting for the recorder's own loop.
-        if (::recorder.isInitialized) recorder.cancel()
+        // Never discard a take on teardown. The shutdown releases the mic and keeps the captured audio as a pending
+        // take; it runs on its own NonCancellable job because the scope is cancelled on the next line.
+        if (::controller.isInitialized) quickScope.launch(NonCancellable) { controller.shutdown() }
+        quickScope.cancel()
         super.onDestroy()
     }
 

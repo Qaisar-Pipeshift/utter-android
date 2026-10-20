@@ -422,7 +422,11 @@
     <string name="backup_import_failed">That file is not an Utter backup.</string>
     <string name="backup_confirm_title">Import these settings?</string>
     <string name="backup_confirm_body">This backup changes %1$d settings. The API key is not in the backup and stays as it is.</string>
+    <string name="backup_confirm_server_title">Use a different server?</string>
+    <string name="backup_confirm_server_body">This backup changes %1$d settings and points Utter at a different server. Your API key will be sent to:</string>
+    <string name="backup_confirm_server_note">Only continue if you trust that server.</string>
     <string name="backup_apply">Import</string>
+    <string name="backup_apply_server">Use this server</string>
 
     <!-- Diagnostics (docs/plan.md Task 14) -->
     <string name="diag_section_events">Events</string>

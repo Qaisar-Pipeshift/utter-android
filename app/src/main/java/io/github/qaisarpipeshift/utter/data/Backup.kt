@@ -36,8 +36,16 @@ object Backup {
         return SettingsJson.decode(settingsObject.toString())
     }
 
-    /** How many settings the import would change, plus the decoded settings. */
-    data class Summary(val changed: Int, val imported: Settings)
+    /**
+     * How many settings the import would change, the decoded settings, and the new server host when the backup points
+     * somewhere else. [newHost] is non-null exactly when the user must explicitly accept a different server — the API
+     * key would otherwise start going to a host nobody chose.
+     */
+    data class Summary(
+        val changed: Int,
+        val imported: Settings,
+        val newHost: String? = null,
+    )
 
     fun summary(current: Settings, imported: Settings): Summary {
         val before = JSONObject(SettingsJson.encode(current))
@@ -51,7 +59,21 @@ object Backup {
         for (key in keys) {
             if (before.opt(key)?.toString() != after.opt(key)?.toString()) changed++
         }
-        return Summary(changed, imported)
+        val currentHost = hostOf(current.baseUrl)
+        val importedHost = hostOf(imported.baseUrl)
+        // A backup with no URL (or the same host) changes nothing about where the key goes.
+        val newHost = importedHost?.takeIf { it.lowercase() != currentHost?.lowercase() }
+        return Summary(changed, imported, newHost)
+    }
+
+    /** The host a base URL points at, or null for a blank or unparsable one; hosts compare case-insensitively. */
+    fun hostOf(baseUrl: String): String? {
+        if (baseUrl.isBlank()) return null
+        return try {
+            java.net.URI(baseUrl).host?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun hasKnownKey(objectValue: JSONObject): Boolean {

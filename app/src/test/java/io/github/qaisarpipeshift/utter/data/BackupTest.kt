@@ -66,6 +66,30 @@ class BackupTest {
     }
 
     @Test
+    fun `summary flags only a real server host change`() {
+        val current = Settings(baseUrl = "https://one.example")
+
+        // Same host with a path or a port is the same server: the key goes to the same place.
+        assertNull(Backup.summary(current, Settings(baseUrl = "https://one.example/v1")).newHost)
+        assertNull(Backup.summary(current, Settings(baseUrl = "https://ONE.example")).newHost)
+
+        val moved = Backup.summary(current, Settings(baseUrl = "https://two.example"))
+        assertEquals("two.example", moved.newHost)
+
+        // A backup with no URL at all keeps the current server silently.
+        assertNull(Backup.summary(current, Settings(baseUrl = "")).newHost)
+        assertNull(Backup.summary(Settings(), Settings(baseUrl = "")).newHost)
+    }
+
+    @Test
+    fun `host extraction tolerates blank and junk urls`() {
+        assertNull(Backup.hostOf(""))
+        assertNull(Backup.hostOf("   "))
+        assertNull(Backup.hostOf("not a url"))
+        assertEquals("speech.example", Backup.hostOf("https://speech.example:8443/v1"))
+    }
+
+    @Test
     fun `presets survive the round trip`() {
         val custom = Presets.defaults + io.github.qaisarpipeshift.utter.core.Preset(
             id = "mine",
