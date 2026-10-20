@@ -137,7 +137,7 @@ class LiveSessionTest {
 
     @Test
     fun `audio queued before the session is ready is capped`() {
-        serve(object : WebSocketListener())
+        serve(object : WebSocketListener() {})
 
         val handle = api().openLive(null)
         repeat(50) { assertTrue(handle.send(ByteArray(320))) }
