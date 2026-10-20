@@ -120,6 +120,8 @@ class DictationController(
      * that the take cannot be finished without.
      */
     private val onInsertDone: () -> Unit = {},
+    /** Warms the server before a non-live take uploads; fire-and-forget, so a failure costs a request and nothing. */
+    private val prewarm: suspend () -> Unit = {},
     /**
      * History label for a take that has no app of its own, such as the Quick Settings recorder. Null keeps the
      * normal `seenApps` label of [FieldInfo.pkg]; the field's package still keys the app rule.
@@ -295,6 +297,10 @@ class DictationController(
         haptic(Haptic.START)
         startTicker()
         startLive(started)
+        if (snapshot.prewarm && !snapshot.live) {
+            // This take will upload to a cold server; one request in the background shortens the wait at stop.
+            scope.launch { runCatching { prewarm() } }
+        }
 
         val outcome = try {
             startRecorder(started)

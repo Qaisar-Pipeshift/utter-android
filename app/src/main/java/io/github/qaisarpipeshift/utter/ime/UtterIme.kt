@@ -143,6 +143,7 @@ class UtterIme :
             diag = graph.diag,
             // The switch to the previous keyboard runs only after the take's bookkeeping has finished.
             onInsertDone = ::onInserted,
+            prewarm = { graph.api.warm() },
         )
 
         liveStatus = LiveStatus(this, { graph.settings.current() }, imeScope)
@@ -350,10 +351,12 @@ class UtterIme :
         }
         val text = inputOps.selection() ?: return
         val settings = graph.settings.current()
+        // Cancel first, stop second, arm third: a chunk from the previous stream must not slip into the new track.
+        speechJob?.cancel()
         graph.pcmPlayer.stop()
+        graph.pcmPlayer.begin()
         speakingState.value = true
         graph.diag.event("read_aloud_start")
-        speechJob?.cancel()
         speechJob = imeScope.launch {
             val result: Result<Unit> = try {
                 graph.api.speech(text, settings.ttsVoice) { chunk, rate ->
@@ -364,7 +367,9 @@ class UtterIme :
             } catch (_: Exception) {
                 Result.failure(IllegalStateException("speech"))
             }
-            // A cancelled job leaves the stop to stopReadAloud(); only a finished one stops its own track here.
+            // Let the buffered tail play out before the track is released. A cancelled job leaves the stop to
+            // stopReadAloud(); only a finished one drains and stops its own track here.
+            if (result.isSuccess) graph.pcmPlayer.drain()
             graph.pcmPlayer.stop()
             speakingState.value = false
             graph.diag.event(if (result.isFailure) "read_aloud_failed" else "read_aloud_done")

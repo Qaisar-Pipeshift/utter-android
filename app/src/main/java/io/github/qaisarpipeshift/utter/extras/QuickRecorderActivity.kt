@@ -116,6 +116,7 @@ class QuickRecorderActivity : ComponentActivity() {
             stats = graph.stats,
             isOnline = ::isOnline,
             diag = graph.diag,
+            prewarm = { graph.api.warm() },
             historyLabel = getString(R.string.extras_quick_app_label),
         )
         lifecycleScope.launch { graph.pending.purge() }

@@ -238,6 +238,8 @@ class HistoryViewModel(private val graph: Graph) : ViewModel() {
         }
         playJob?.cancel()
         graph.pcmPlayer.stop()
+        // Arm the player again: the stop above latched it, and the first chunk of this clip must be accepted.
+        graph.pcmPlayer.begin()
         _state.value = _state.value.copy(playingId = audioId)
         playJob = viewModelScope.launch {
             try {
@@ -252,12 +254,16 @@ class HistoryViewModel(private val graph: Graph) : ViewModel() {
                         }
                     }
                 }
+                // Let the buffered tail play out before the track is released.
+                graph.pcmPlayer.drain()
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: Exception) {
                 graph.diag.event("history_play_error")
             } finally {
+                // Only this clip's own playback stops the shared player; a newer clip owns it otherwise.
                 if (_state.value.playingId == audioId) {
+                    graph.pcmPlayer.stop()
                     _state.value = _state.value.copy(playingId = null)
                 }
             }

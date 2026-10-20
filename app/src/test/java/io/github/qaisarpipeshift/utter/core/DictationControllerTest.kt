@@ -70,6 +70,7 @@ class DictationControllerTest {
     private fun TestScope.controller(
         pendingStore: PendingStore = pending,
         onInsertDone: () -> Unit = {},
+        prewarm: suspend () -> Unit = {},
     ): DictationController = DictationController(
         scope = this,
         settings = { settings },
@@ -85,6 +86,7 @@ class DictationControllerTest {
         haptic = { haptics += it },
         diag = diag,
         onInsertDone = onInsertDone,
+        prewarm = prewarm,
     )
 
     private fun request(
@@ -819,6 +821,36 @@ class DictationControllerTest {
 
         assertEquals(1, recorder.cancelCalls)
         assertTrue(pending.list().isEmpty())
+    }
+
+    // ---- prewarm ----
+
+    @Test
+    fun `prewarm warms the server when live dictation is off`() = runTest {
+        settings = settings.copy(live = false, prewarm = true)
+        var warms = 0
+        val controller = controller(prewarm = { warms++ })
+
+        controller.start(request())
+        runCurrent()
+
+        assertEquals(1, warms)
+        controller.cancel()
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `prewarm is skipped when live dictation is on`() = runTest {
+        settings = settings.copy(live = true, prewarm = true)
+        var warms = 0
+        val controller = controller(prewarm = { warms++ })
+
+        controller.start(request())
+        runCurrent()
+
+        assertEquals(0, warms)
+        controller.cancel()
+        advanceUntilIdle()
     }
 
     // ---- the keyboard hand-back ----

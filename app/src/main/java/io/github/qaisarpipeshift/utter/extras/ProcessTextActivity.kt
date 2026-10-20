@@ -158,7 +158,10 @@ class ProcessTextActivity : ComponentActivity() {
             return
         }
         ui.value = ui.value.copy(speaking = true, message = null)
+        // Cancel first, stop second, arm third: a chunk from the previous stream must not slip into the new track.
         speechJob?.cancel()
+        graph.pcmPlayer.stop()
+        graph.pcmPlayer.begin()
         speechJob = lifecycleScope.launch {
             val settings = graph.settings.current()
             val result: Result<Unit> = try {
@@ -170,7 +173,8 @@ class ProcessTextActivity : ComponentActivity() {
             } catch (_: Exception) {
                 Result.failure(IllegalStateException("speech"))
             }
-            // Cancellation is handled by stopSpeech(), which also releases the track.
+            // Let the buffered tail play out. Cancellation is handled by stopSpeech(), which releases the track.
+            if (result.isSuccess) graph.pcmPlayer.drain()
             graph.pcmPlayer.stop()
             ui.value = ui.value.copy(
                 speaking = false,
