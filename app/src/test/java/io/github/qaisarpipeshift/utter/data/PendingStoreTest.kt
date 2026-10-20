@@ -48,6 +48,26 @@ class PendingStoreTest {
     }
 
     @Test
+    fun `selection and incognito round-trip through the meta file`() = runBlocking {
+        store.newTake(meta("t1").copy(selection = "teh cat", incognito = true))
+
+        val loaded = store.meta("t1")!!
+
+        assertEquals("teh cat", loaded.selection)
+        assertTrue(loaded.incognito)
+    }
+
+    @Test
+    fun `meta written without selection reads back as a plain take`() = runBlocking {
+        store.newTake(meta("t1"))
+
+        val loaded = store.meta("t1")!!
+
+        assertNull(loaded.selection)
+        assertFalse(loaded.incognito)
+    }
+
+    @Test
     fun `update stores the last error and duration`() = runBlocking {
         store.newTake(meta("t1"))
 

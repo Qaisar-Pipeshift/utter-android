@@ -9,7 +9,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-/** Metadata of a take kept for Retry (docs/plan.md Task 7); the PCM lives next to it in the cache. */
+/**
+ * Metadata of a take kept for Retry (docs/plan.md Task 7); the PCM lives next to it in the cache.
+ *
+ * [selection] and [incognito] belong to the take's field: without them a retried voice edit would insert the
+ * cleaned instruction text instead of replacing the selection, and a retried incognito take could write history.
+ */
 data class PendingMeta(
     val id: String,
     val createdAt: Long,
@@ -19,6 +24,8 @@ data class PendingMeta(
     val fieldKind: String,
     val durationMs: Long = 0,
     val lastError: String? = null,
+    val selection: String? = null,
+    val incognito: Boolean = false,
 )
 
 /**
@@ -168,6 +175,8 @@ class PendingStore(
             fieldKind = root.optString("fieldKind"),
             durationMs = root.optLong("durationMs", 0),
             lastError = root.opt("lastError") as? String,
+            selection = root.opt("selection") as? String,
+            incognito = root.optBoolean("incognito", false),
         )
     }
 
@@ -183,6 +192,8 @@ class PendingStore(
                 .put("fieldKind", meta.fieldKind)
                 .put("durationMs", meta.durationMs)
                 .put("lastError", meta.lastError ?: JSONObject.NULL)
+                .put("selection", meta.selection ?: JSONObject.NULL)
+                .put("incognito", meta.incognito)
             val target = File(takesDir, "${meta.id}$JSON_SUFFIX")
             val tmp = File(takesDir, "${meta.id}$JSON_SUFFIX.tmp")
             tmp.writeText(root.toString())

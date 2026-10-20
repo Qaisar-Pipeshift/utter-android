@@ -32,8 +32,11 @@ sealed interface PanelState {
     /** Mic released, waiting for STT, cleanup and insertion. */
     data class Finishing(val action: TakeAction) : PanelState
 
-    /** The take is kept in [takeId] for Retry; [reason] is what the panel says. */
-    data class Failed(val reason: FailReason, val takeId: String) : PanelState
+    /**
+     * The take is kept in [takeId] for Retry; [reason] is what the panel says. [takeId] is empty when there is
+     * nothing to retry (the recorder never opened) and [code] then carries the Android error code to show.
+     */
+    data class Failed(val reason: FailReason, val takeId: String, val code: Int? = null) : PanelState
 }
 
 /**
@@ -41,6 +44,7 @@ sealed interface PanelState {
  *
  * [cleaned] and [notCleaned] are separate because "cleaned" is a success and "not cleaned" is the hint shown when
  * cleanup failed but the raw text was still inserted. [canUndo] and [canSwap] are the IME's checks at insert time.
+ * [noSpeech] marks the "No speech" notice, which is not a result: [text] is empty and the panel shows the notice.
  */
 data class ResultChip(
     val text: String,
@@ -49,6 +53,7 @@ data class ResultChip(
     val latencyMs: Long,
     val canUndo: Boolean,
     val canSwap: Boolean,
+    val noSpeech: Boolean = false,
 )
 
 /** Why a take failed (docs/spec.md §8). No speech is not a failure; [TOO_SHORT] is reserved for the IME's short-tap hint. */

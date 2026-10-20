@@ -15,6 +15,7 @@ import io.github.qaisarpipeshift.utter.net.LiveHandle
 import io.github.qaisarpipeshift.utter.net.SttResult
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -103,6 +104,12 @@ class DictationController(
     private val _state = MutableStateFlow<PanelState>(PanelState.Idle(result = null, pendingCount = 0, offline = false))
     val state: StateFlow<PanelState> = _state.asStateFlow()
 
+    /**
+     * Set synchronously by [start] and [retry] so a second tap cannot slip into the first take's start phase, which
+     * suspends on the pending store before the panel state becomes [PanelState.Recording].
+     */
+    private val operationBusy = AtomicBoolean(false)
+
     private var take: Take? = null
 
     @Volatile
@@ -117,9 +124,16 @@ class DictationController(
 
     // ---- panel API ----
 
-    /** Starts a take. Ignored while another take is recording or finishing; a failed take is dropped (one kept). */
+    /** Starts a take. Ignored while another take is starting, recording or finishing. */
     fun start(request: TakeRequest, holding: Boolean = false) {
-        scope.launch { startTake(request, holding) }
+        if (!operationBusy.compareAndSet(false, true)) return
+        scope.launch {
+            try {
+                startTake(request, holding)
+            } finally {
+                operationBusy.set(false)
+            }
+        }
     }
 
     /** Ends the take and runs it to insertion. Ignored unless recording. */
@@ -150,13 +164,20 @@ class DictationController(
 
     /** Runs a kept take through upload again, using the metadata stored with it. */
     fun retry(takeId: String) {
-        scope.launch { retryTake(takeId) }
+        if (!operationBusy.compareAndSet(false, true)) return
+        scope.launch {
+            try {
+                retryTake(takeId)
+            } finally {
+                operationBusy.set(false)
+            }
+        }
     }
 
     /** Drops a kept take the user no longer wants. */
     fun discard(takeId: String) {
         scope.launch {
-            pending.delete(takeId)
+            quietStore { pending.delete(takeId) }
             val failed = _state.value as? PanelState.Failed
             if (failed?.takeId == takeId) _state.value = idleState(null)
             diag.event("take_discard")
@@ -167,7 +188,7 @@ class DictationController(
     fun undo() {
         scope.launch {
             if (lastInsert == null) return@launch
-            if (inserter.undo()) {
+            if (guarded(false) { inserter.undo() }) {
                 lastInsert = null
                 diag.event("undo")
                 _state.value = idleState(null)
@@ -184,11 +205,8 @@ class DictationController(
 
     private suspend fun startTake(request: TakeRequest, holding: Boolean) {
         val current = _state.value
-        when (current) {
-            is PanelState.Recording, is PanelState.Finishing -> return
-            is PanelState.Failed -> pending.delete(current.takeId)
-            else -> Unit
-        }
+        if (current is PanelState.Recording || current is PanelState.Finishing) return
+        // A failed take is not touched: it stays in the pending queue (spec §15.4) while this take starts.
         val snapshot = settings()
         val field = request.field
         if (field.kind == FieldKind.PASSWORD) {
@@ -198,16 +216,17 @@ class DictationController(
 
         val preset = if (request.action == TakeAction.CLEAN) presetFor(snapshot, request.presetId) else null
         val id = UUID.randomUUID().toString()
-        val file = pending.newTake(
-            PendingMeta(
-                id = id,
-                createdAt = clock.now(),
-                action = request.action.name,
-                presetId = request.presetId,
-                pkg = field.pkg,
-                fieldKind = field.kind.name,
-            ),
+        val meta = PendingMeta(
+            id = id,
+            createdAt = clock.now(),
+            action = request.action.name,
+            presetId = request.presetId,
+            pkg = field.pkg,
+            fieldKind = field.kind.name,
+            selection = request.selection,
+            incognito = field.incognito,
         )
+        val file = safeStore(pending.pcmFile(id)) { pending.newTake(meta) }
         val started = Take(id, file, request, preset, snapshot)
         take = started
         lastInsert = null
@@ -235,12 +254,13 @@ class DictationController(
             RecorderStart.Error(RECORDER_FAILED, failure.javaClass.simpleName)
         }
         if (outcome is RecorderStart.Error) {
+            // No audio was captured, so there is nothing to retry: drop the file and show the Android code.
             diag.event("recorder_fail", outcome.code.toString())
             stopLive(cancel = true)
-            pending.update(id, "recorder_${outcome.code}")
+            quietStore { pending.delete(id) }
             clearTake()
             haptic(Haptic.ERROR)
-            _state.value = PanelState.Failed(FailReason.RECORDER, id)
+            _state.value = PanelState.Failed(FailReason.RECORDER, takeId = "", code = outcome.code)
         }
     }
 
@@ -264,12 +284,12 @@ class DictationController(
         val duration = recorder.stop()
         started.durationMs = duration
         diag.event("take_stop", duration.toString())
-        pending.update(started.id, null, duration)
-        if (started.settings.liveInField) runCatching { inserter.clearPreview() }
+        quietStore { pending.update(started.id, null, duration) }
+        if (started.settings.liveInField) clearPreviewSafely()
 
         if (duration < MIN_TAKE_MS) {
             stopLive(cancel = true)
-            pending.delete(started.id)
+            quietStore { pending.delete(started.id) }
             clearTake()
             diag.event("take_short", duration.toString())
             _state.value = idleState(null)
@@ -287,10 +307,10 @@ class DictationController(
         tickerJob = null
         specJob?.cancel()
         specJob = null
-        if (started?.settings?.liveInField == true) runCatching { inserter.clearPreview() }
+        if (started?.settings?.liveInField == true) clearPreviewSafely()
         stopLive(cancel = true)
         recorder.cancel()
-        started?.let { pending.delete(it.id) }
+        started?.let { quietStore { pending.delete(it.id) } }
         clearTake()
         lastInsert = null
         haptic(Haptic.CANCEL)
@@ -303,14 +323,14 @@ class DictationController(
             is PanelState.Recording, is PanelState.Finishing -> return
             else -> Unit
         }
-        val meta = pending.meta(takeId)
+        val meta = safeStore<PendingMeta?>(null) { pending.meta(takeId) }
         if (meta == null) {
             _state.value = idleState(null)
             return
         }
         val file = pending.pcmFile(takeId)
         if (!file.exists()) {
-            pending.delete(takeId)
+            quietStore { pending.delete(takeId) }
             _state.value = idleState(null)
             return
         }
@@ -318,14 +338,25 @@ class DictationController(
         val action = actionOf(meta.action)
         val kind = fieldKindOf(meta.fieldKind)
         // The field may be a different one after an app switch; the inserter targets the current connection anyway.
-        val field = FieldInfo(kind, incognito = false, pkg = meta.pkg, fieldId = -1, actionLabel = EnterAction.NEWLINE)
-        val request = TakeRequest(action, meta.presetId, field, selection = null)
+        val field = FieldInfo(
+            kind,
+            incognito = meta.incognito,
+            pkg = meta.pkg,
+            fieldId = -1,
+            actionLabel = EnterAction.NEWLINE,
+        )
+        val request = TakeRequest(action, meta.presetId, field, selection = meta.selection)
         val retried = Take(takeId, file, request, presetFor(snapshot, meta.presetId), snapshot)
         retried.durationMs = meta.durationMs
         take = retried
         lastInsert = null
         _state.value = PanelState.Finishing(action)
         diag.event("take_retry", action.name)
+        if (action == TakeAction.EDIT_SELECTION && meta.selection.isNullOrBlank()) {
+            // The selection is gone; inserting the cleaned instruction would corrupt the field.
+            fail(retried, FailReason.SERVER_ERROR, "edit_selection_lost")
+            return
+        }
         handleResult(retried, uploadTake(retried))
     }
 
@@ -357,7 +388,7 @@ class DictationController(
             val recording = _state.value as? PanelState.Recording ?: return
             _state.value = recording.copy(committed = event.committed, tentative = event.tentative)
             if (take?.settings?.liveInField == true) {
-                runCatching { inserter.preview(event.committed + event.tentative) }
+                guarded(Unit) { inserter.preview(event.committed + event.tentative) }
             }
             maybeSpeculate(event.committed, event.tentative)
             return
@@ -414,7 +445,7 @@ class DictationController(
             return SttResult.Network(KIND_OFFLINE)
         }
         diag.event("upload", started.durationMs.toString())
-        return transcriber.upload(started.file, started.settings.vocabulary)
+        return uploadSafely(started)
     }
 
     private suspend fun handleResult(started: Take, result: SttResult) {
@@ -444,7 +475,7 @@ class DictationController(
         val action = started.request.action
 
         if (action == TakeAction.EDIT_SELECTION && !selection.isNullOrBlank()) {
-            return when (val result = cleaner.clean(Prompts.editMessage(rawText, selection))) {
+            return when (val result = cleanSafely(Prompts.editMessage(rawText, selection))) {
                 is CleanResult.Text -> {
                     val text = result.text.trim()
                     if (text.isEmpty()) {
@@ -471,7 +502,7 @@ class DictationController(
             return Completion.Done(TextPipeline.forField(rawText, kind, snapshot), false, false, preset.name, false)
         }
         val speculative = specCleaned?.takeIf { specCommitted == speech.text }
-        val cleanedText = speculative ?: when (val result = cleaner.clean(Prompts.cleanMessage(preset.prompt, rawText))) {
+        val cleanedText = speculative ?: when (val result = cleanSafely(Prompts.cleanMessage(preset.prompt, rawText))) {
             is CleanResult.Text -> result.text
 
             is CleanResult.Failed -> {
@@ -496,36 +527,41 @@ class DictationController(
     private suspend fun insertDone(started: Take, speech: SttResult.Text, done: Completion.Done) {
         val snapshot = started.settings
         val meta = InsertMeta(started.field, done.replaceSelection)
-        val inserted = runCatching { inserter.insert(done.text, meta) }.getOrDefault(false)
+        val inserted = guarded(false) { inserter.insert(done.text, meta) }
         diag.event(if (inserted) "insert" else "insert_clipboard")
 
         val rule = snapshot.appRules.firstOrNull { it.pkg == started.field.pkg }
-        val keepHistory = snapshot.historyOn && !started.field.incognito && rule?.historyOff != true
+        val statsAllowed = !started.field.incognito && rule?.historyOff != true
         val words = TextOps.wordCount(done.text)
-        if (keepHistory) {
-            history.add(
-                HistoryEntry(
-                    id = UUID.randomUUID().toString(),
-                    ts = clock.now(),
-                    pkg = started.field.pkg,
-                    appLabel = snapshot.seenApps[started.field.pkg] ?: started.field.pkg,
-                    raw = speech.text,
-                    finalText = done.text,
-                    action = started.request.action.name,
-                    presetName = done.presetName,
-                    durationMs = started.durationMs,
-                    latencyMs = speech.latencyMs,
-                    words = words,
-                ),
-            )
-            history.prune(snapshot.historyLimit)
-            stats.record(started.field.pkg, words, started.durationMs)
+        if (snapshot.historyOn && statsAllowed) {
+            quietStore {
+                history.add(
+                    HistoryEntry(
+                        id = UUID.randomUUID().toString(),
+                        ts = clock.now(),
+                        pkg = started.field.pkg,
+                        appLabel = snapshot.seenApps[started.field.pkg] ?: started.field.pkg,
+                        raw = speech.text,
+                        finalText = done.text,
+                        action = started.request.action.name,
+                        presetName = done.presetName,
+                        durationMs = started.durationMs,
+                        latencyMs = speech.latencyMs,
+                        words = words,
+                    ),
+                )
+            }
+            quietStore { history.prune(snapshot.historyLimit) }
+        }
+        // Stats are about the user's dictation, not its text: they survive history being off (spec §15.4).
+        if (statsAllowed) {
+            quietStore { stats.record(started.field.pkg, words, started.durationMs) }
         }
 
         if (snapshot.keepAudioDays > 0) {
-            pending.keepAudio(started.id, snapshot.keepAudioDays)
+            quietStore { pending.keepAudio(started.id, snapshot.keepAudioDays) }
         } else {
-            pending.delete(started.id)
+            quietStore { pending.delete(started.id) }
         }
 
         val canSwap = inserted && !done.replaceSelection && (done.cleaned || !needsRawField(started.field.kind))
@@ -544,16 +580,25 @@ class DictationController(
     }
 
     private suspend fun noSpeech(started: Take, latencyMs: Long) {
-        pending.delete(started.id)
+        quietStore { pending.delete(started.id) }
         clearTake()
         lastInsert = null
         diag.event("no_speech")
-        _state.value = idleState(ResultChip("No speech", false, false, latencyMs, false, false))
+        val chip = ResultChip(
+            text = "",
+            cleaned = false,
+            notCleaned = false,
+            latencyMs = latencyMs,
+            canUndo = false,
+            canSwap = false,
+            noSpeech = true,
+        )
+        _state.value = idleState(chip)
     }
 
     private suspend fun fail(started: Take, reason: FailReason, error: String) {
         stopLive(cancel = true)
-        pending.update(started.id, error, started.durationMs)
+        quietStore { pending.update(started.id, error, started.durationMs) }
         clearTake()
         lastInsert = null
         haptic(Haptic.ERROR)
@@ -580,7 +625,7 @@ class DictationController(
         specJob = scope.launch {
             delay(SPECULATIVE_DELAY_MS)
             val message = Prompts.cleanMessage(preset.prompt, TextPipeline.raw(committed, snapshot))
-            val result = cleaner.clean(message)
+            val result = cleanSafely(message)
             if (result is CleanResult.Text && specCommitted == committed) specCleaned = result.text
         }
     }
@@ -597,7 +642,7 @@ class DictationController(
                 diag.event("swap_noop")
                 return
             }
-            if (inserter.swap(raw, last.meta)) {
+            if (guarded(false) { inserter.swap(raw, last.meta) }) {
                 last.inserted = raw
                 last.cleaned = false
                 last.notCleaned = false
@@ -609,13 +654,13 @@ class DictationController(
 
         val preset = presetFor(snapshot, null) ?: return
         _state.value = PanelState.Finishing(TakeAction.CLEAN)
-        val result = cleaner.clean(Prompts.cleanMessage(preset.prompt, last.raw))
+        val result = cleanSafely(Prompts.cleanMessage(preset.prompt, last.raw))
         val cleaned = if (result is CleanResult.Text && result.text.isNotBlank()) {
             TextPipeline.forField(result.text, last.field.kind, snapshot)
         } else {
             null
         }
-        if (cleaned != null && inserter.swap(cleaned, last.meta)) {
+        if (cleaned != null && guarded(false) { inserter.swap(cleaned, last.meta) }) {
             last.inserted = cleaned
             last.cleaned = true
             last.notCleaned = false
@@ -627,6 +672,55 @@ class DictationController(
     }
 
     // ---- helpers ----
+
+    /** One-shot inserter calls: an exception becomes the fallback value, never a keyboard crash. */
+    private fun <T> guarded(default: T, block: () -> T): T =
+        try {
+            block()
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (_: Exception) {
+            default
+        }
+
+    /** Store calls: losing a pending take or a history line must never fail the dictation. */
+    private suspend fun <T> safeStore(default: T, block: suspend () -> T): T =
+        try {
+            block()
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (_: Exception) {
+            diag.event("store_error")
+            default
+        }
+
+    private suspend fun quietStore(block: suspend () -> Unit) {
+        safeStore(Unit) { block() }
+    }
+
+    private suspend fun cleanSafely(message: String): CleanResult =
+        try {
+            cleaner.clean(message)
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (failure: Exception) {
+            diag.event("clean_exception", failure.javaClass.simpleName)
+            CleanResult.Failed("exception")
+        }
+
+    private suspend fun uploadSafely(started: Take): SttResult =
+        try {
+            transcriber.upload(started.file, started.settings.vocabulary)
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (failure: Exception) {
+            diag.event("upload_exception", failure.javaClass.simpleName)
+            SttResult.Network("io")
+        }
+
+    private fun clearPreviewSafely() {
+        guarded(Unit) { inserter.clearPreview() }
+    }
 
     private fun startTicker() {
         tickerJob = scope.launch {
@@ -670,7 +764,7 @@ class DictationController(
     }
 
     private suspend fun idleState(chip: ResultChip?): PanelState.Idle =
-        PanelState.Idle(chip, pending.list().size, !isOnline())
+        PanelState.Idle(chip, safeStore(0) { pending.list().size }, !isOnline())
 
     private fun chipFor(last: LastInsert): ResultChip =
         ResultChip(last.inserted, last.cleaned, last.notCleaned, last.latencyMs, canUndo = true, canSwap = true)
