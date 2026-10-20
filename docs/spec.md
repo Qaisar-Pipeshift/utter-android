@@ -406,3 +406,20 @@ Panel (IME) states: Setup needed · Secure field · Idle · Recording(hands-free
 ```
 
 Style: Handy tokens (§9) as the default palette; 16 dp radius cards; one accent; generous spacing; icons from material-icons-extended (rounded set); motion only on state change (≤ 250 ms), none while idle.
+
+## 17 · Extras Claude recommends (in v1; all on-demand, no new permissions)
+
+| Feature | Why it matters | How | P |
+|---|---|---|---|
+| **Smart field types** | Dictating into a URL / email / number / phone field must not add spaces, capitals or cleanup | `EditorInfo.inputType` → URI & email: raw, no spaces, lowercase · number/phone: digits only · email-subject: Formal preset | P1 |
+| **Spoken punctuation + layout in raw mode** | Raw text still needs "new line", "new paragraph", "comma", "full stop", "question mark" | client-side rules after STT, before replacements | P2 |
+| **Swap after insert** | Inserted raw but wanted clean (or the reverse) — one tap instead of re-dictating | result chip "✨ Clean it" / "Raw" replaces the insert if it is still intact | P2 |
+| **Select text anywhere → Utter** (`ACTION_PROCESS_TEXT`) | Works from Gboard without switching keyboards: select text in any app → "Utter: Clean / Rewrite / Read aloud" in the selection menu | translucent activity; editable fields get the result back, others copy it | P2 |
+| **Transcribe shared voice notes** | WhatsApp/Telegram voice notes → text (Share → Utter) | `ACTION_SEND audio/*` → `POST /v1/audio/transcriptions` (server decodes ogg/opus/m4a/mp3/wav) → copy / share / history | P2 |
+| **Read aloud** | Listen to a long message or your own draft | `POST /v1/audio/speech` on the same server + key; panel 🔊 on selected text, and Process-text "Read aloud"; stop anytime | P3 |
+| **Dictate to clipboard tile** | A thought with no text field open (note to self) | Quick Settings tile → small translucent recorder → result to clipboard + history (Gboard shows it as a paste chip) | P3 |
+| **Share setup link** | Setting up the Samsung without typing a 48-char key | Settings → "Share setup" → `utter://setup?u=…&k=…` link; tapping it opens the wizard pre-filled (warning: link contains the key) | P2 |
+| **Offline-aware start** | Know at once that a take will need Retry | one `ConnectivityManager` check at record start (no listener) → "Offline — take will be saved" | P1 |
+| **Latency badge** | See release→text time per take | small "· 140 ms" in the result chip + Diagnostics | P2 |
+| **Hinglish presets** | Speaking Hindi/Hinglish but chatting in English or romanized Hindi | presets "Translate → English" and "Hinglish (Roman script)" | P2 |
+| **Own-CPU meter** | Proof of "almost zero battery" | Diagnostics shows Utter's CPU time this boot (`Process.getElapsedCpuTime`) and takes count | P3 |
