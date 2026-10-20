@@ -8,17 +8,14 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,18 +31,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.github.qaisarpipeshift.utter.R
 import io.github.qaisarpipeshift.utter.core.PanelState
-import io.github.qaisarpipeshift.utter.ui.theme.LocalUtterDark
-import io.github.qaisarpipeshift.utter.ui.theme.UtterColors
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Tiny overlay telling the user what a slide will do before they release (docs/plan.md Task 9). */
 private enum class MicHint { NONE, CANCEL, LOCK }
-
-/** Turn warning colour threshold, matching the controller's warning haptic (docs/spec.md §4). */
-private const val WARNING_MS = 280_000L
 
 /**
  * The mic key with its gestures (docs/spec.md §4, §15.1; docs/plan.md Task 9).
@@ -65,7 +56,6 @@ fun MicButton(
     /** False in the Appearance preview: no pointer handler may eat a drag meant for the settings page. */
     interactive: Boolean = true,
     amplitudes: List<Float>,
-    elapsedMs: Long?,
     onTap: () -> Unit,
     onHoldStart: () -> Unit,
     onHoldRelease: () -> Unit,
@@ -204,26 +194,5 @@ fun MicButton(
                 modifier = Modifier.offset(y = (-34).dp).size(18.dp),
             )
         }
-        if (elapsedMs != null) {
-            val warning = if (LocalUtterDark.current) UtterColors.WarningDark else UtterColors.WarningLight
-            Text(
-                text = formatElapsed(elapsedMs),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .clip(RoundedCornerShape(50))
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(horizontal = 5.dp),
-                fontSize = 11.sp,
-                color = if (elapsedMs >= WARNING_MS) warning else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
     }
-}
-
-/** `m:ss`, the same shape as the notch status while recording (docs/spec.md §3b). */
-private fun formatElapsed(elapsedMs: Long): String {
-    val seconds = (elapsedMs / 1000).coerceAtLeast(0)
-    val minutes = seconds / 60
-    val rest = seconds % 60
-    return "$minutes:${rest.toString().padStart(2, '0')}"
 }

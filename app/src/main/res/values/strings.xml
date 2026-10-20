@@ -190,6 +190,7 @@
     <string name="home_server_settings">Server settings</string>
     <string name="home_server_settings_value">URL, key, cleanup</string>
     <string name="home_check_now">Check now</string>
+    <string name="home_set_up">Set up</string>
     <string name="home_checking">Checking…</string>
     <string name="home_status_not_set_up">Not set up</string>
     <string name="home_status_not_checked">Not checked</string>

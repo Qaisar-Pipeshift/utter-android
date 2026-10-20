@@ -35,6 +35,8 @@ fun ChoiceRow(
         Text(
             text = title,
             style = MaterialTheme.typography.bodyLarge,
+            // The card's surfaceVariant would tint this title; a row title is primary text.
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(bottom = 8.dp),
         )
         Row(

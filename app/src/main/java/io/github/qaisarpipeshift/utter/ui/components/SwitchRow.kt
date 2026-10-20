@@ -37,7 +37,12 @@ fun SwitchRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.bodyLarge)
+            // Titles are primary text; the card's surfaceVariant must not mute them (only the subtitle is secondary).
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
             if (subtitle.isNotBlank()) {
                 Text(
                     text = subtitle,

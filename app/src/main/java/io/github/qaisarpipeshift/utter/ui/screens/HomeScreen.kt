@@ -276,6 +276,9 @@ fun HomeScreen(graph: Graph, onNavigate: (String) -> Unit) {
         HomeTile(Icons.Rounded.Link, R.string.share_title, Routes.SHARE_SETUP),
     )
 
+    // Not set up: there is nothing to check yet, so the primary action is setup, not a probe.
+    val setUpNeeded = settings.baseUrl.isBlank() || ui.setupNeeded
+
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         Column(
             modifier = Modifier
@@ -297,16 +300,20 @@ fun HomeScreen(graph: Graph, onNavigate: (String) -> Unit) {
             )
 
             SectionCard(title = stringResource(R.string.home_server_section)) {
-                ServerStatus(ui = ui, notConfigured = settings.baseUrl.isBlank() || ui.setupNeeded)
+                ServerStatus(ui = ui, notConfigured = setUpNeeded)
                 Spacer(modifier = Modifier.height(14.dp))
                 Button(
-                    onClick = model::check,
+                    onClick = { if (setUpNeeded) onNavigate(Routes.SERVER) else model.check() },
                     enabled = !ui.checking,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
                         stringResource(
-                            if (ui.checking) R.string.home_checking else R.string.home_check_now,
+                            when {
+                                setUpNeeded -> R.string.home_set_up
+                                ui.checking -> R.string.home_checking
+                                else -> R.string.home_check_now
+                            },
                         ),
                     )
                 }
@@ -402,7 +409,7 @@ fun HomeScreen(graph: Graph, onNavigate: (String) -> Unit) {
 private fun ServerStatus(ui: HomeUiState, notConfigured: Boolean) {
     val check = ui.check
     val status: Pair<PillTone, Int> = when {
-        notConfigured -> PillTone.NEUTRAL to R.string.home_status_not_set_up
+        notConfigured -> PillTone.WARN to R.string.home_status_not_set_up
         ui.checking && check == null -> PillTone.NEUTRAL to R.string.home_checking
         check == null -> PillTone.NEUTRAL to R.string.home_status_not_checked
         ui.checking && check?.models == null -> PillTone.NEUTRAL to R.string.home_checking

@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -53,6 +55,7 @@ import io.github.qaisarpipeshift.utter.ime.panel.KeyRow
 import io.github.qaisarpipeshift.utter.ime.panel.MicButton
 import io.github.qaisarpipeshift.utter.ime.panel.PresetSheet
 import io.github.qaisarpipeshift.utter.ime.panel.StatusStrip
+import io.github.qaisarpipeshift.utter.ui.theme.utterWarningColor
 
 /** Every action the panel can ask the IME for; the IME owns the controller, the presence flags and the intents. */
 interface PanelHost {
@@ -311,44 +314,68 @@ private fun ControlRow(
     onShowPresets: () -> Unit,
 ) {
     val editable = state is PanelState.Idle || state is PanelState.Failed
-    Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            BackspaceKey(
-                enabled = state !is PanelState.Finishing,
-                interactive = interactive,
-                onBackspace = host::onBackspace,
-                onDeleteWord = host::onDeleteWord,
-            )
+    val editMode = selectionAvailable && settings.voiceEdit
+    val recording = state as? PanelState.Recording
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Buttons band: the mic's 72 dp circle owns the centre of its 88 dp ring canvas and the sparkle sits in its
+        // own 72 dp slot, so both circles share one vertical centre.
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = MIC_BOX),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                BackspaceKey(
+                    enabled = state !is PanelState.Finishing,
+                    interactive = interactive,
+                    onBackspace = host::onBackspace,
+                    onDeleteWord = host::onDeleteWord,
+                )
+            }
+            Box(Modifier.width(MIC_BOX), contentAlignment = Alignment.Center) {
+                MicButton(
+                    state = state,
+                    haptics = settings.haptics,
+                    holdThresholdMs = settings.holdThresholdMs,
+                    slideGestures = settings.slideGestures,
+                    interactive = interactive,
+                    amplitudes = amplitudes,
+                    onTap = host::onMicTap,
+                    onHoldStart = host::onMicHoldStart,
+                    onHoldRelease = host::onMicHoldRelease,
+                    onCancelGesture = host::onMicCancel,
+                    onLockGesture = host::onMicLock,
+                )
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                Box(Modifier.size(BUTTON_SLOT), contentAlignment = Alignment.Center) {
+                    CleanButton(
+                        enabled = editable,
+                        editMode = editMode,
+                        presetsAllowed = state is PanelState.Idle,
+                        interactive = interactive,
+                        onClean = { host.onClean(null) },
+                        onShowPresets = onShowPresets,
+                    )
+                }
+            }
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            MicButton(
-                state = state,
-                haptics = settings.haptics,
-                holdThresholdMs = settings.holdThresholdMs,
-                slideGestures = settings.slideGestures,
-                interactive = interactive,
-                amplitudes = amplitudes,
-                elapsedMs = (state as? PanelState.Recording)?.elapsedMs,
-                onTap = host::onMicTap,
-                onHoldStart = host::onMicHoldStart,
-                onHoldRelease = host::onMicHoldRelease,
-                onCancelGesture = host::onMicCancel,
-                onLockGesture = host::onMicLock,
-            )
-            ButtonLabel(stringResource(R.string.utter_label_dictate))
-        }
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-            CleanButton(
-                enabled = editable,
-                editMode = selectionAvailable && settings.voiceEdit,
-                presetsAllowed = state is PanelState.Idle,
-                interactive = interactive,
-                onClean = { host.onClean(null) },
-                onShowPresets = onShowPresets,
-            )
+        // Captions: one row, one baseline, each centred under the same slot as its button.
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.width(MIC_BOX), contentAlignment = Alignment.Center) {
+                if (recording != null) {
+                    ElapsedLabel(recording.elapsedMs)
+                } else {
+                    ButtonLabel(stringResource(R.string.utter_label_dictate))
+                }
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                Box(Modifier.size(BUTTON_SLOT), contentAlignment = Alignment.Center) {
+                    ButtonLabel(
+                        stringResource(if (editMode) R.string.utter_edit_label else R.string.utter_label_clean),
+                    )
+                }
+            }
         }
     }
 }
@@ -377,28 +404,23 @@ private fun CleanButton(
     } else {
         Modifier
     }
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(
-                    MaterialTheme.colorScheme.secondary.copy(alpha = if (enabledNow) 0.30f else 0.12f),
-                )
-                .then(gestures),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.AutoAwesome,
-                contentDescription = stringResource(
-                    if (editMode) R.string.utter_edit_selection else R.string.utter_clean_dictation,
-                ),
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = if (enabledNow) 1f else 0.4f),
-                modifier = Modifier.size(24.dp),
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .background(
+                MaterialTheme.colorScheme.secondary.copy(alpha = if (enabledNow) 0.30f else 0.12f),
             )
-        }
-        ButtonLabel(
-            stringResource(if (editMode) R.string.utter_edit_label else R.string.utter_label_clean),
+            .then(gestures),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.AutoAwesome,
+            contentDescription = stringResource(
+                if (editMode) R.string.utter_edit_selection else R.string.utter_clean_dictation,
+            ),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = if (enabledNow) 1f else 0.4f),
+            modifier = Modifier.size(24.dp),
         )
     }
 }
@@ -414,13 +436,43 @@ private fun CleanButton(
 private fun ButtonLabel(text: String) {
     Text(
         text = text,
-        modifier = Modifier.padding(top = 2.dp).clearAndSetSemantics { },
+        modifier = Modifier.clearAndSetSemantics { },
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         softWrap = false,
     )
 }
+
+/** While recording the mic caption becomes the timer — same slot, same style, same baseline as "Clean". */
+@Composable
+private fun ElapsedLabel(elapsedMs: Long) {
+    Text(
+        text = formatElapsed(elapsedMs),
+        modifier = Modifier.clearAndSetSemantics { },
+        style = MaterialTheme.typography.labelSmall,
+        color = if (elapsedMs >= WARNING_MS) utterWarningColor() else MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        softWrap = false,
+    )
+}
+
+/** `m:ss`, the same shape as the notch status while recording (docs/spec.md §3b). */
+private fun formatElapsed(elapsedMs: Long): String {
+    val seconds = (elapsedMs / 1000).coerceAtLeast(0)
+    val minutes = seconds / 60
+    val rest = seconds % 60
+    return "$minutes:${rest.toString().padStart(2, '0')}"
+}
+
+/** The two centre buttons sit in 72 dp slots so their circles share one vertical centre. */
+private val BUTTON_SLOT = 72.dp
+
+/** The mic's layout box: the 72 dp circle plus 8 dp of ring canvas on each side. */
+private val MIC_BOX = 88.dp
+
+/** Turn warning colour threshold, matching the controller's warning haptic (docs/spec.md §4). */
+private const val WARNING_MS = 280_000L
 
 /** Setup, mic-permission and secure-field states: one icon, one explanation, at most one action. */
 @Composable

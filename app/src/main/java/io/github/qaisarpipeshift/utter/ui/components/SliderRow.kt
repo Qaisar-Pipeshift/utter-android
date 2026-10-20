@@ -36,6 +36,8 @@ fun SliderRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
+                // A row title is primary text; the card's surfaceVariant must not mute it.
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
             Text(

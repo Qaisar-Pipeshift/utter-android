@@ -40,7 +40,13 @@ fun SettingRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.bodyLarge)
+            // A card's surfaceVariant background would otherwise tint titles with onSurfaceVariant; the title is
+            // primary text and must stay onSurface. Only values and descriptions are secondary.
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
             if (value.isNotBlank()) {
                 Text(
                     text = value,
