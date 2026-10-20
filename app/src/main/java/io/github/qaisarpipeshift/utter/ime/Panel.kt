@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -131,8 +131,10 @@ fun Panel(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(panelHeight(settings.panelHeight))
+                    // A minimum, not a fixed height: the panel may grow at large font scales but never clips.
+                    .heightIn(min = panelHeight(settings.panelHeight))
                     .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 when (state) {
                     PanelState.SetupNeeded -> SimpleBody(
@@ -142,7 +144,7 @@ fun Panel(
                         body = stringResource(R.string.utter_setup_body),
                         action = stringResource(R.string.utter_setup_button),
                         onAction = host::onSetup,
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
                     )
 
                     PanelState.MicPermissionNeeded -> SimpleBody(
@@ -152,7 +154,7 @@ fun Panel(
                         body = stringResource(R.string.utter_mic_needed_body),
                         action = stringResource(R.string.utter_grant_mic),
                         onAction = host::onGrantMic,
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
                     )
 
                     PanelState.SecureField -> SimpleBody(
@@ -162,7 +164,7 @@ fun Panel(
                         body = stringResource(R.string.utter_secure_body),
                         action = null,
                         onAction = null,
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
                     )
 
                     PanelState.Blocked -> SimpleBody(
@@ -172,7 +174,7 @@ fun Panel(
                         body = stringResource(R.string.utter_blocked_body),
                         action = null,
                         onAction = null,
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
                     )
 
                     else -> {
@@ -186,7 +188,7 @@ fun Panel(
                             onUndo = host::onUndo,
                             onSwap = host::onSwap,
                             onReadAloud = host::onReadAloud,
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
                         )
                         ControlRow(
                             state = state,
@@ -236,7 +238,7 @@ private fun ControlRow(
 ) {
     val editable = state is PanelState.Idle || state is PanelState.Failed
     Row(
-        modifier = Modifier.fillMaxWidth().height(88.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
@@ -367,7 +369,7 @@ private fun SimpleBody(
             Box(
                 modifier = Modifier
                     .padding(top = 8.dp)
-                    .height(48.dp)
+                    .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.primary)
                     .clickable(onClick = onAction)

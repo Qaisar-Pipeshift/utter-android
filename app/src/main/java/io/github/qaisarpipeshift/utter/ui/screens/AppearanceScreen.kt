@@ -3,12 +3,14 @@ package io.github.qaisarpipeshift.utter.ui.screens
 import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -154,8 +156,9 @@ private fun PanelPreview(height: PanelHeight) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(previewHeight(height))
+                .heightIn(min = previewHeight(height))
                 .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
             StatusStrip(
                 state = PreviewState,
@@ -167,10 +170,10 @@ private fun PanelPreview(height: PanelHeight) {
                 onUndo = {},
                 onSwap = {},
                 onReadAloud = {},
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
             )
             Row(
-                modifier = Modifier.fillMaxWidth().height(88.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Spacer(modifier = Modifier.weight(1f))

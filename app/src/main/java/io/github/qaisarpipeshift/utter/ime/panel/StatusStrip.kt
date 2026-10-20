@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -90,12 +90,16 @@ private fun LiveText(state: PanelState.Recording) {
     }
     Text(
         text = text,
-        modifier = Modifier.fillMaxWidth().verticalScroll(scroll),
+        // Two lines at the largest supported font scale; longer live text scrolls inside instead of growing the panel.
+        modifier = Modifier.fillMaxWidth().heightIn(max = LIVE_TEXT_MAX_HEIGHT).verticalScroll(scroll),
         fontSize = 15.sp,
         lineHeight = 20.sp,
         color = MaterialTheme.colorScheme.onSurface,
     )
 }
+
+/** The live strip keeps the panel's height stable while the transcript grows. */
+private val LIVE_TEXT_MAX_HEIGHT = 56.dp
 
 @Composable
 private fun IdleStrip(
@@ -244,7 +248,7 @@ private fun Chip(
     }
     Box(
         modifier = Modifier
-            .height(48.dp)
+            .heightIn(min = 48.dp)
             .clickable(enabled = onClick != null) { onClick?.invoke() },
         contentAlignment = Alignment.Center,
     ) {
