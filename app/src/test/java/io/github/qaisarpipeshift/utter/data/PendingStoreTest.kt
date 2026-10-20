@@ -18,7 +18,8 @@ class PendingStoreTest {
 
     private lateinit var cache: File
     private lateinit var files: File
-    private var now = 1_000_000L
+    // A realistic epoch time: File.setLastModified rejects negative values, and "8 days ago" must stay positive.
+    private var now = 1_800_000_000_000L
     private lateinit var store: PendingStore
 
     @Before
