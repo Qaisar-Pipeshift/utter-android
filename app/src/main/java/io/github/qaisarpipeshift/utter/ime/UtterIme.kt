@@ -33,7 +33,6 @@ import io.github.qaisarpipeshift.utter.Graph
 import io.github.qaisarpipeshift.utter.MainActivity
 import io.github.qaisarpipeshift.utter.UtterApp
 import io.github.qaisarpipeshift.utter.audio.AndroidRecorder
-import io.github.qaisarpipeshift.utter.core.CleanResult
 import io.github.qaisarpipeshift.utter.core.Cleaner
 import io.github.qaisarpipeshift.utter.core.DictationController
 import io.github.qaisarpipeshift.utter.core.EnterAction
@@ -46,6 +45,7 @@ import io.github.qaisarpipeshift.utter.core.TakeAction
 import io.github.qaisarpipeshift.utter.core.TakeRequest
 import io.github.qaisarpipeshift.utter.data.Settings
 import io.github.qaisarpipeshift.utter.data.ThemeMode
+import io.github.qaisarpipeshift.utter.net.CleanResult
 import io.github.qaisarpipeshift.utter.notify.LiveStatus
 import io.github.qaisarpipeshift.utter.ui.theme.UtterTheme
 import kotlinx.coroutines.CoroutineExceptionHandler

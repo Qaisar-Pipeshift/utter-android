@@ -151,7 +151,8 @@ class InputOps(
     fun enter(action: EnterAction) {
         val connection = ime.currentInputConnection ?: return
         when (action) {
-            EnterAction.NEWLINE -> connection.sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
+            // sendDownUpKeyEvents belongs to InputMethodService, not to the connection.
+            EnterAction.NEWLINE -> ime.sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
             EnterAction.SEND -> connection.performEditorAction(EditorInfo.IME_ACTION_SEND)
             EnterAction.SEARCH -> connection.performEditorAction(EditorInfo.IME_ACTION_SEARCH)
             EnterAction.GO -> connection.performEditorAction(EditorInfo.IME_ACTION_GO)
@@ -162,7 +163,7 @@ class InputOps(
 
     /** Deletes one character; the panel repeats this while backspace is held. */
     fun backspace() {
-        ime.currentInputConnection?.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+        ime.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
     }
 
     /** Deletes back to the start of the previous word (map for a future long-press-backspace gesture). */
