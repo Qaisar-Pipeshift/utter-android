@@ -52,6 +52,8 @@ android {
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Robolectric renders real Compose pixels for the screenshot tests, so it needs the app's resources.
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -73,15 +75,26 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    // The Compose test host activity, present only in debug builds and on the unit-test classpath.
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
+    // Screenshot tests (approved test-only deps, docs/spec.md §5): Robolectric renders Compose to PNGs.
+    testImplementation(composeBom)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
 }
 
 // CI is the only place tests run, so a failure must print its full message and stack trace in the log.
 tasks.withType<Test>().configureEach {
+    // Record mode without the Roborazzi Gradle plugin: every captureRoboImage call writes its PNG.
+    systemProperty("roborazzi.test.record", "true")
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

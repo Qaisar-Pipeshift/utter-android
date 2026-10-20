@@ -164,6 +164,8 @@ State machine (one dictation at a time):
 
 Deps allowed: AndroidX core-ktx, activity-compose, Compose BOM (material3, material-icons-extended — R8 strips unused), lifecycle (runtime/viewmodel-compose), navigation-compose (predictive back), datastore-preferences, OkHttp (+ mockwebserver for tests), kotlinx-coroutines, kotlinx-serialization-json, desugar_jdk_libs. **Not allowed:** WorkManager, Room/KSP, Firebase/analytics, Gson, Ktor. Anything else → ask first.
 
+Test-only additions (approved 2026-10-21, v0.1.4): Robolectric 4.17, Roborazzi 1.76.0 (+ `roborazzi-compose`, `roborazzi-junit-rule`), Compose `ui-test-junit4` (via the BOM) and `ui-test-manifest`. They render the keyboard panel and the settings screens to PNGs in CI (`app/build/outputs/roborazzi/`, uploaded as `utter-screens-<run_number>`) and never reach the APK.
+
 Toolchain (pinned from a project whose CI was green 2026-10-15): Gradle 9.8.1 · AGP 9.4.1 (built-in Kotlin) · Kotlin 2.4.21 · Compose BOM 2026.09.00 · compileSdk 37 · targetSdk 36 · minSdk 28 · JDK 17 · OkHttp 5.5.0 · coroutines 1.11.0 · lifecycle 2.11.0 · navigation-compose 2.10.2 · datastore 1.2.1 · activity-compose 1.13.0 · core-ktx 1.19.1.
 
 License GPL-3.0 (same as Whisper++, so its code may be borrowed with attribution in About → Licenses).
