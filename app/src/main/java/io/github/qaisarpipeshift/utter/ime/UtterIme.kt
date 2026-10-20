@@ -40,6 +40,7 @@ import io.github.qaisarpipeshift.utter.core.FieldInfo
 import io.github.qaisarpipeshift.utter.core.FieldInfos
 import io.github.qaisarpipeshift.utter.core.FieldKind
 import io.github.qaisarpipeshift.utter.core.Haptic
+import io.github.qaisarpipeshift.utter.core.LedgerEvent
 import io.github.qaisarpipeshift.utter.core.PanelState
 import io.github.qaisarpipeshift.utter.core.TakeAction
 import io.github.qaisarpipeshift.utter.core.TakeRequest
@@ -144,6 +145,7 @@ class UtterIme :
             // The switch to the previous keyboard runs only after the take's bookkeeping has finished.
             onInsertDone = ::onInserted,
             prewarm = { graph.api.warm() },
+            onTakeEnd = graph.ledger::takeEnded,
         )
 
         liveStatus = LiveStatus(this, { graph.settings.current() }, imeScope)
@@ -222,6 +224,8 @@ class UtterIme :
         )
         fieldState.value = field
         secureField = field.kind == FieldKind.PASSWORD
+        // Resource ledger: the panel is about to be visible, so the CPU since the last hide goes to the hidden bucket.
+        graph.ledger.checkpoint(LedgerEvent.SHOW)
         recordSeenApp(pkg)
         refreshSelection()
         refreshUi()
@@ -236,6 +240,8 @@ class UtterIme :
 
     override fun onFinishInputView(finishingInput: Boolean) {
         controller.onPanelHidden()
+        // Memory only: the ledger writes to disk at take end, onDestroy and when Diagnostics opens.
+        graph.ledger.checkpoint(LedgerEvent.HIDE)
         // The sheet that owns the Stop chip is gone; never leave audio playing with no visible way to end it.
         stopReadAloud()
         selectionState.value = null
@@ -265,9 +271,15 @@ class UtterIme :
     override fun onDestroy() {
         stopReadAloud()
         if (::liveStatus.isInitialized) liveStatus.cancel()
-        // Release the microphone and keep whatever was captured as a pending take. The shutdown runs on its own
-        // NonCancellable job: the scope is cancelled on the next line, and a take must survive that.
-        if (::controller.isInitialized) imeScope.launch(NonCancellable) { controller.shutdown() }
+        if (::graph.isInitialized) graph.ledger.checkpoint(LedgerEvent.DESTROY)
+        // Release the microphone, keep whatever was captured as a pending take and make the ledger's last deltas
+        // durable. The shutdown runs on its own NonCancellable job: the scope is cancelled on the next line.
+        if (::controller.isInitialized || ::graph.isInitialized) {
+            imeScope.launch(NonCancellable) {
+                if (::graph.isInitialized) graph.ledger.persist()
+                if (::controller.isInitialized) controller.shutdown()
+            }
+        }
         imeScope.cancel()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         viewModelStore.clear()

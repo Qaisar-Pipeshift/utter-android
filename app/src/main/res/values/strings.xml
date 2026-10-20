@@ -442,6 +442,23 @@
     <string name="diag_cpu_value">%1$d s</string>
     <string name="diag_events_count">Buffered events</string>
 
+    <!-- Diagnostics: battery and resources (v0.1.4) -->
+    <string name="diag_section_resources">Battery &amp; resources</string>
+    <string name="diag_resources_estimate">Estimated energy use — not a measurement. CPU, microphone and network are counted at Utter\'s own checkpoints.</string>
+    <string name="diag_resources_loading">Reading counters…</string>
+    <string name="diag_resources_today_value">%1$.2f mAh today</string>
+    <string name="diag_resources_visible">Keyboard on screen</string>
+    <string name="diag_resources_hidden">Hidden CPU (idle)</string>
+    <string name="diag_resources_mic">Microphone open</string>
+    <string name="diag_resources_network">Network</string>
+    <string name="diag_resources_network_value">↑ %1$s · ↓ %2$s</string>
+    <string name="diag_resources_takes">Takes</string>
+    <string name="diag_resources_takes_value">%1$d · live %2$d · upload %3$d</string>
+    <string name="diag_resources_seconds">%1$d s</string>
+    <string name="diag_resources_week">Last 7 days · estimated mAh</string>
+    <string name="diag_resources_hidden_legend">Hidden CPU</string>
+    <string name="diag_resources_open">Android battery usage</string>
+
     <!-- About (docs/plan.md Task 14) -->
     <string name="about_section_version">Version</string>
     <string name="about_version">%1$s · %2$s</string>

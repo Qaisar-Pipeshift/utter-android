@@ -1,11 +1,15 @@
 package io.github.qaisarpipeshift.utter
 
 import android.content.Context
+import android.net.TrafficStats
+import android.os.Process
 import io.github.qaisarpipeshift.utter.audio.PcmPlayer
 import io.github.qaisarpipeshift.utter.core.Cleaner
+import io.github.qaisarpipeshift.utter.core.ResourceReading
 import io.github.qaisarpipeshift.utter.core.TakeRetrier
 import io.github.qaisarpipeshift.utter.data.HistoryStore
 import io.github.qaisarpipeshift.utter.data.PendingStore
+import io.github.qaisarpipeshift.utter.data.ResourceLedger
 import io.github.qaisarpipeshift.utter.data.SecretStore
 import io.github.qaisarpipeshift.utter.data.SettingsRepo
 import io.github.qaisarpipeshift.utter.data.StatsStore
@@ -39,6 +43,24 @@ class Graph(app: Context) {
 
     /** Thirty-day insights counters. */
     val stats: StatsStore by lazy { StatsStore(appContext.filesDir) }
+
+    /**
+     * Thirty-day resource counters (v0.1.4): CPU visible and hidden, mic time, traffic and take counts. Deltas stay
+     * in memory between the three disk writes; the counters are read only at the IME's own checkpoints, never by a
+     * timer. `Process` and `TrafficStats` live here so the store itself stays Android-free and JVM-testable.
+     */
+    val ledger: ResourceLedger by lazy {
+        ResourceLedger(
+            dir = appContext.filesDir,
+            reading = {
+                ResourceReading(
+                    cpuMs = cpuTimeMs(),
+                    txBytes = trafficBytes { TrafficStats.getUidTxBytes(Process.myUid()) },
+                    rxBytes = trafficBytes { TrafficStats.getUidRxBytes(Process.myUid()) },
+                )
+            },
+        )
+    }
 
     /**
      * The app's one HTTP stack: one connection pool shared by the IME, the Server screen's probes and any other
@@ -87,6 +109,20 @@ class Graph(app: Context) {
 
     /** Shared playback for kept history audio; one track at a time, released when playback stops. */
     val pcmPlayer: PcmPlayer by lazy { PcmPlayer() }
+
+    /** Process CPU time; a platform failure must cost a counter, not the keyboard. */
+    private fun cpuTimeMs(): Long = try {
+        Process.getElapsedCpuTime()
+    } catch (_: Exception) {
+        0L
+    }
+
+    /** Per-uid counters answer -1 (TrafficStats.UNSUPPORTED) on some devices; a missing counter counts as zero. */
+    private fun trafficBytes(read: () -> Long): Long = try {
+        read().coerceAtLeast(0L)
+    } catch (_: Exception) {
+        0L
+    }
 
     private companion object {
         /** The server's documented cleanup model (docs/spec.md §6) until the user picks one. */

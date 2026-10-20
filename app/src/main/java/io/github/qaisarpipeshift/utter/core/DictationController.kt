@@ -123,6 +123,12 @@ class DictationController(
     /** Warms the server before a non-live take uploads; fire-and-forget, so a failure costs a request and nothing. */
     private val prewarm: suspend () -> Unit = {},
     /**
+     * Runs once a recorded take's text path is complete: the resource ledger counts one take, its microphone time
+     * and whether it ended on the live socket (true) or an upload (false). Called after the insert, so a small disk
+     * write here can never delay the user's text.
+     */
+    private val onTakeEnd: suspend (micMs: Long, live: Boolean) -> Unit = { _, _ -> },
+    /**
      * History label for a take that has no app of its own, such as the Quick Settings recorder. Null keeps the
      * normal `seenApps` label of [FieldInfo.pkg]; the field's package still keys the app rule.
      */
@@ -379,8 +385,10 @@ class DictationController(
             return
         }
 
-        val result = awaitLive() ?: uploadTake(started)
+        val liveResult = awaitLive()
+        val result = liveResult ?: uploadTake(started)
         handleResult(started, result)
+        onTakeEnd(duration, liveResult != null)
     }
 
     private suspend fun cancelTake() {

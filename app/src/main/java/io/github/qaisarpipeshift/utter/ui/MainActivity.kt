@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import io.github.qaisarpipeshift.utter.R
 import io.github.qaisarpipeshift.utter.UtterApp
+import io.github.qaisarpipeshift.utter.core.LedgerEvent
 import io.github.qaisarpipeshift.utter.data.SetupLink
 import io.github.qaisarpipeshift.utter.data.Settings
 import io.github.qaisarpipeshift.utter.data.ThemeMode
@@ -145,6 +146,12 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         linkRequests.value = setupLinkFrom(intent)
         if (intent.getStringExtra(EXTRA_ONBOARDING_STEP) == STEP_MIC) micStepRequests.value += 1
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // One of the resource ledger's checkpoints (v0.1.4); it only reads counters — the disk is not touched here.
+        (application as? UtterApp)?.graph?.ledger?.checkpoint(LedgerEvent.ACTIVITY_STOP)
     }
 
     private fun setupLinkFrom(intent: Intent?): SetupLink.Data? =
