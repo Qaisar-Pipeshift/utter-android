@@ -8,7 +8,8 @@ import io.github.qaisarpipeshift.utter.data.Settings
  *
  * [raw] turns spoken punctuation and filler words into clean text, then applies the user's replacements.
  * [forField] adapts the result to the target field type (a URL must not get spaces or capitals, a phone number
- * must not get letters). No Android types, so every rule is unit-tested on the JVM.
+ * must not get letters). Sentence-start capitalization is not done here: it needs the text before the cursor, so
+ * the inserter applies [TextOps.capitalizeIfSentenceStart] at insert time. No Android types, so every rule is unit-tested on the JVM.
  */
 object TextPipeline {
 
@@ -23,15 +24,15 @@ object TextPipeline {
     fun forField(text: String, kind: FieldKind, s: Settings): String {
         val trimmed = text.trim()
         return when (kind) {
-            FieldKind.TEXT, FieldKind.EMAIL_SUBJECT ->
-                if (s.capitalize) TextOps.capitalizeIfSentenceStart(null, trimmed) else trimmed
+            FieldKind.TEXT, FieldKind.EMAIL_SUBJECT -> trimmed
 
             FieldKind.URI -> trimmed.lowercase().filterNot { it.isWhitespace() }
 
+            // Spoken "at"/"dot" only as whole words between spaces, before spaces are removed: "kathy" stays "kathy".
             FieldKind.EMAIL -> trimmed.lowercase()
+                .replace(SPOKEN_AT, "@")
+                .replace(SPOKEN_DOT, ".")
                 .filterNot { it.isWhitespace() }
-                .replace("at", "@")
-                .replace("dot", ".")
 
             FieldKind.NUMBER -> trimmed.filter { it.isDigit() || it == '.' || it == '-' }
 
@@ -44,9 +45,13 @@ object TextPipeline {
         }
     }
 
+    private val SPOKEN_AT = Regex("\\s+at\\s+")
+    private val SPOKEN_DOT = Regex("\\s+dot\\s+")
+
     private data class SpokenRule(val phrase: String, val symbol: String, val eatSpaceAfter: Boolean = false)
 
-    // Longest phrases first so "exclamation point" is not partially consumed by a shorter rule.
+    // Longest phrases first so "exclamation point" is not partially consumed by a shorter rule. "period" is left out on
+    // purpose: it is an ordinary word ("trial period") far more often than dictated punctuation.
     private val SPOKEN_RULES = listOf(
         SpokenRule("exclamation point", "!"),
         SpokenRule("exclamation mark", "!"),
@@ -57,7 +62,6 @@ object TextPipeline {
         SpokenRule("full stop", "."),
         SpokenRule("semicolon", ";"),
         SpokenRule("new line", "\n", eatSpaceAfter = true),
-        SpokenRule("period", "."),
         SpokenRule("colon", ":"),
         SpokenRule("comma", ","),
     )

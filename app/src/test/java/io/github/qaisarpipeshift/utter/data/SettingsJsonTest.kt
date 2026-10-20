@@ -139,4 +139,21 @@ class SettingsJsonTest {
         assertFalse(json.contains("apiKey"))
         assertFalse(json.contains("api_key"))
     }
+
+    @Test
+    fun `numbers are clamped to the UI ranges`() {
+        val decoded = SettingsJson.decode(
+            """{"holdThresholdMs":5,"tailMs":9000,"cleanTimeoutMs":1,"historyLimit":-3,"keepAudioDays":99}""",
+        )
+        assertEquals(150, decoded.holdThresholdMs)
+        assertEquals(500, decoded.tailMs)
+        assertEquals(3_000L, decoded.cleanTimeoutMs)
+        assertEquals(0, decoded.historyLimit)
+        assertEquals(7, decoded.keepAudioDays)
+    }
+
+    @Test
+    fun `an empty preset list falls back to the built-ins`() {
+        assertEquals(Presets.defaults, SettingsJson.decode("""{"presets":[]}""").presets)
+    }
 }

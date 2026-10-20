@@ -21,7 +21,7 @@ class TextPipelineTest {
     fun `spoken sentence marks`() {
         assertEquals(
             "Hi! Yes: okay.",
-            TextPipeline.raw("Hi exclamation mark Yes colon okay period", Settings()),
+            TextPipeline.raw("Hi exclamation mark Yes colon okay full stop", Settings()),
         )
         assertEquals("Stop. no wait, now.", TextPipeline.raw("Stop full stop no wait comma now full stop", Settings()))
     }
@@ -117,28 +117,15 @@ class TextPipelineTest {
     // ---- forField(): smart field adaptation ----
 
     @Test
-    fun `text field capitalizes the first letter`() {
-        assertEquals("Hello there", TextPipeline.forField("hello there", FieldKind.TEXT, Settings()))
-        assertEquals("hello there", TextPipeline.forField("hello there", FieldKind.TEXT, Settings(capitalize = false)))
+    fun `text fields are left as is because capitalization needs the cursor context`() {
+        assertEquals("hello there", TextPipeline.forField("hello there", FieldKind.TEXT, Settings()))
+        assertEquals("and then", TextPipeline.forField(" and then ", FieldKind.TEXT, Settings()))
+        assertEquals("lunch tomorrow", TextPipeline.forField("lunch tomorrow", FieldKind.EMAIL_SUBJECT, Settings()))
     }
 
     @Test
-    fun `capitalization only changes the first letter`() {
-        assertEquals("Hello WORLD", TextPipeline.forField("hello WORLD", FieldKind.TEXT, Settings()))
-    }
-
-    @Test
-    fun `capitalization leaves a leading digit or capital alone`() {
-        assertEquals("42 apples", TextPipeline.forField("42 apples", FieldKind.TEXT, Settings()))
-        assertEquals("Hello", TextPipeline.forField("Hello", FieldKind.TEXT, Settings()))
-    }
-
-    @Test
-    fun `email subject is capitalized`() {
-        assertEquals(
-            "Lunch tomorrow",
-            TextPipeline.forField("lunch tomorrow", FieldKind.EMAIL_SUBJECT, Settings()),
-        )
+    fun `the word period is not punctuation`() {
+        assertEquals("The trial period ended", TextPipeline.raw("The trial period ended", Settings()))
     }
 
     @Test
@@ -160,6 +147,12 @@ class TextPipelineTest {
             TextPipeline.forField("John at Example dot com", FieldKind.EMAIL, Settings()),
         )
         assertEquals("a@b.co", TextPipeline.forField("A @ B . CO", FieldKind.EMAIL, Settings()))
+    }
+
+    @Test
+    fun `email keeps at and dot inside words`() {
+        assertEquals("kathy@data.com", TextPipeline.forField("Kathy at data dot com", FieldKind.EMAIL, Settings()))
+        assertEquals("dotty@atlas.io", TextPipeline.forField("dotty@atlas.io", FieldKind.EMAIL, Settings()))
     }
 
     @Test

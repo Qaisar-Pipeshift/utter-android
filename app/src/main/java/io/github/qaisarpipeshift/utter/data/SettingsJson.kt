@@ -8,8 +8,9 @@ import org.json.JSONObject
 /**
  * JSON codec for [Settings] (docs/plan.md Task 2). Uses `org.json` because it ships with Android.
  *
- * Decoding is deliberately forgiving: unknown keys are ignored, missing keys take defaults, and a wrong type falls
- * back to that key's default instead of throwing. Settings are user data — a corrupt preference must never brick
+ * Decoding is deliberately forgiving: unknown keys are ignored, missing keys take defaults, a wrong type falls
+ * back to that key's default instead of throwing, and numbers are clamped to the ranges the UI allows (an imported
+ * backup must not set a negative hold threshold). Settings are user data — a corrupt preference must never brick
  * the keyboard.
  */
 object SettingsJson {
@@ -96,14 +97,14 @@ object SettingsJson {
         return Settings(
             baseUrl = root.string("baseUrl", ""),
             tapHandsFree = root.bool("tapHandsFree", true),
-            holdThresholdMs = root.int("holdThresholdMs", 300),
+            holdThresholdMs = root.int("holdThresholdMs", 300).coerceIn(150, 800),
             slideGestures = root.bool("slideGestures", true),
             live = root.bool("live", true),
             liveInField = root.bool("liveInField", false),
             autoStart = root.bool("autoStart", false),
             duckAudio = root.bool("duckAudio", true),
             sounds = root.bool("sounds", false),
-            tailMs = root.int("tailMs", 0),
+            tailMs = root.int("tailMs", 0).coerceIn(0, 500),
             micId = root.intOrNull("micId"),
             haptics = root.bool("haptics", true),
             speculativeClean = root.bool("speculativeClean", false),
@@ -118,7 +119,7 @@ object SettingsJson {
             presets = root.presetList("presets", Presets.defaults),
             defaultPresetId = root.string("defaultPresetId", Presets.CLEAN_ID),
             cleanModel = root.string("cleanModel", ""),
-            cleanTimeoutMs = root.long("cleanTimeoutMs", 15_000L),
+            cleanTimeoutMs = root.long("cleanTimeoutMs", 15_000L).coerceIn(3_000L, 60_000L),
             voiceEdit = root.bool("voiceEdit", true),
             autoEnter = root.bool("autoEnter", false),
             copyToClipboard = root.bool("copyToClipboard", false),
@@ -126,8 +127,8 @@ object SettingsJson {
             appRules = root.appRules("appRules"),
             seenApps = root.seenApps("seenApps"),
             historyOn = root.bool("historyOn", true),
-            historyLimit = root.int("historyLimit", 200),
-            keepAudioDays = root.int("keepAudioDays", 0),
+            historyLimit = root.int("historyLimit", 200).coerceAtLeast(0),
+            keepAudioDays = root.int("keepAudioDays", 0).coerceIn(0, 7),
             notch = root.bool("notch", true),
             theme = themeOf(root.string("theme", "")),
             palette = paletteOf(root.string("palette", "")),
@@ -196,7 +197,8 @@ private fun JSONObject.presetList(key: String, fallback: List<Preset>): List<Pre
             ),
         )
     }
-    return out
+    // An empty list would leave the ✨ button with nothing to run; fall back to the built-ins.
+    return out.ifEmpty { fallback }
 }
 
 private fun JSONObject.appRules(key: String): List<AppRule> {
