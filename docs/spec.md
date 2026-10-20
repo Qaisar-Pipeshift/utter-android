@@ -25,6 +25,15 @@ Android voice keyboard for a self-hosted dictation server. Handy's idea, on a ph
 Pass → **fork Whisper++** and add only the deltas this spec owns (§3b notch Live Update, §8 server-specific failure handling).
 Fail → **build Utter** from this spec.
 
+**Trial result 2026-10-20 (OnePlus 15, Whisper++ nightly `bd0a8f8`) → FAIL → build Utter:**
+
+| Finding | Evidence |
+|---|---|
+| Every dictation from the keyboard ends in "Recording error" (`history_reason_recorder`); Retry from the app works | ingress log: only the app-side retries reached the server, all HTTP 200 — keyboard attempts never left the phone |
+| Live mode cannot work with this server unpatched | client always requests `server_vad`; on stop it commits only after a `speech_started` event this server never sends → sends `clear`, drops the take, waits for timeout |
+| Swipe-back gesture ignored in its settings screens; only the on-screen back button works | Qais, device |
+| Heavy for the use case: 13 providers, modes, insights, 12-h update worker, self-update permission | manifest + source |
+
 ## 1 · Goal and success criteria
 
 | # | Criterion | Measured by |
@@ -272,7 +281,7 @@ push / PR ──► gitleaks ─► hygiene ─► manifest ─► battery ─�
 |---|---|---|
 | Unit (JVM) | multipart body bytes · live event parser (fixtures = §6 events) · response classifier (ok / no speech / STT down / 401) · prompt fill · smart spacing · undo match · URL validation · PCM chunking | CI every push |
 | Contract | key check 200/401; upload + live on speech made by the server's own `/v1/audio/speech` (no audio fixture in repo) → non-empty text; silence → "no speech"; cleanup returns text | CI on main, when contract secrets set |
-| Device (Qais) | D1 🌐 on Gboard reaches Utter in 1 tap · D2 hold-space path · D3 auto-return to Gboard · D4 live preview while speaking · D5 ✨ cleaned text · D6 airplane mode → Retry works after · D7 kill Wi-Fi mid-take → still inserted · D8 switch app mid-take → clipboard · D9 Undo · D10 24 h battery < 1 % · D11 OnePlus: Live Alerts capsule shows ● timer while recording · D12 Samsung: install (Auto Blocker), Samsung Keyboard nav-bar switch → Utter → auto-return, Now Bar chip | release APK |
+| Device (Qais) | D1 🌐 on Gboard reaches Utter in 1 tap · D2 hold-space path · D3 auto-return to Gboard · D4 live preview while speaking · D5 ✨ cleaned text · D6 airplane mode → Retry works after · D7 kill Wi-Fi mid-take → still inserted · D8 switch app mid-take → clipboard · D9 Undo · D10 24 h battery < 1 % · D11 OnePlus: Live Alerts capsule shows ● timer while recording · D12 Samsung: install (Auto Blocker), Samsung Keyboard nav-bar switch → Utter → auto-return, Now Bar chip · D13 swipe-back gesture works on every settings screen (`android:enableOnBackInvokedCallback="true"`, predictive back) | release APK |
 
 ## 13 · Risks to verify on device
 
@@ -281,6 +290,7 @@ push / PR ──► gitleaks ─► hygiene ─► manifest ─► battery ─�
 | Gboard 🌐 rotation differs on his build (Android 17 `imeSwitcherRevamp` uses one list) | hold-space / nav-bar keyboard picker |
 | `AudioRecord` from an IME blocked on his OEM build | FUTO Voice Input records from an IME — if blocked, a transparent recording activity (v1.1) |
 | Composing-text preview misbehaves in some apps | default is panel strip |
+| Recorder fails inside the IME on OxygenOS (Whisper++ did) | Recorder errors are surfaced with the Android error code; take kept; D1 is the first device check |
 | OnePlus doesn't promote the notification to a Live Alert | plain notification; Live Alerts per-app toggle tip |
 | Samsung Now Bar ignores third-party Live Updates on that One UI version | plain notification |
 
