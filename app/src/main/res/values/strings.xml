@@ -12,6 +12,7 @@
     <string name="home_tagline">Your voice, typed anywhere.</string>
     <string name="home_settings">Settings</string>
     <string name="home_server_value">URL and API key</string>
+    <string name="home_coming_soon_body">Home is coming in the next build. Server settings are ready below.</string>
     <string name="share_setup_short">Send to another phone</string>
     <string name="onboarding_title">Set up Utter</string>
     <string name="server_title">Server</string>
