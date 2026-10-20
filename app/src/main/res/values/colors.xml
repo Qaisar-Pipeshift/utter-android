@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="utter_accent">#FFDA5893</color>
+    <color name="utter_bg_light">#FFFBFBFB</color>
+    <color name="utter_bg_dark">#FF2C2B29</color>
+</resources>
