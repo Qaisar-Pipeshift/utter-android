@@ -26,6 +26,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -864,7 +865,8 @@ class DictationControllerTest {
         controller = controller(
             onInsertDone = {
                 // The switch would hide the panel; by the time it runs, the take must be fully recorded.
-                historyAtHandBack = history.list().size
+                // The store runs on Unconfined and its mutex is free by now, so a blocking read is immediate.
+                historyAtHandBack = runBlocking { history.list().size }
                 chipAtHandBack = (controller.state.value as? PanelState.Idle)?.result?.text
             },
         )
