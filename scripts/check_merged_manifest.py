@@ -24,6 +24,9 @@ ALLOWED_PERMISSIONS = {
     "android.permission.RECORD_AUDIO",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.POST_PROMOTED_NOTIFICATIONS",
+    # androidx.core declares this signature permission in every app for ContextCompat.registerReceiver; inert while
+    # no code registers a receiver (Utter registers none).
+    "io.github.qaisarpipeshift.utter.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
 }
 
 
