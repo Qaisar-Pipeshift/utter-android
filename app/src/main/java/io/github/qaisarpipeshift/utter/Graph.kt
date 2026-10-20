@@ -1,6 +1,9 @@
 package io.github.qaisarpipeshift.utter
 
 import android.content.Context
+import io.github.qaisarpipeshift.utter.audio.PcmPlayer
+import io.github.qaisarpipeshift.utter.core.Cleaner
+import io.github.qaisarpipeshift.utter.core.TakeRetrier
 import io.github.qaisarpipeshift.utter.data.HistoryStore
 import io.github.qaisarpipeshift.utter.data.PendingStore
 import io.github.qaisarpipeshift.utter.data.SecretStore
@@ -8,6 +11,7 @@ import io.github.qaisarpipeshift.utter.data.SettingsRepo
 import io.github.qaisarpipeshift.utter.data.StatsStore
 import io.github.qaisarpipeshift.utter.diag.Diag
 import io.github.qaisarpipeshift.utter.net.Api
+import io.github.qaisarpipeshift.utter.net.CleanResult
 import io.github.qaisarpipeshift.utter.net.Http
 import io.github.qaisarpipeshift.utter.net.ServerConfig
 
@@ -56,5 +60,36 @@ class Graph(app: Context) {
                 ServerConfig(current.baseUrl, key)
             }
         }
+    }
+
+    /** Cleanup through the API with the saved model and timeout, shared by the IME and the app's retry path. */
+    val cleaner: Cleaner by lazy {
+        object : Cleaner {
+            override suspend fun clean(message: String): CleanResult {
+                val snapshot = settings.current()
+                val model = snapshot.cleanModel.ifBlank { DEFAULT_CLEAN_MODEL }
+                return api.clean(model, message, snapshot.cleanTimeoutMs)
+            }
+        }
+    }
+
+    /** Retries a pending take from History; uploads the kept PCM and copies the outcome in the UI. */
+    val retrier: TakeRetrier by lazy {
+        TakeRetrier(
+            transcriber = api,
+            cleaner = cleaner,
+            pending = pending,
+            history = history,
+            stats = stats,
+            diag = diag,
+        )
+    }
+
+    /** Shared playback for kept history audio; one track at a time, released when playback stops. */
+    val pcmPlayer: PcmPlayer by lazy { PcmPlayer() }
+
+    private companion object {
+        /** The server's documented cleanup model (docs/spec.md §6) until the user picks one. */
+        const val DEFAULT_CLEAN_MODEL = "cleanup"
     }
 }

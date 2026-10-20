@@ -437,10 +437,15 @@ private fun ServerStatus(ui: HomeUiState, notConfigured: Boolean) {
             ProbeLine(label = stringResource(R.string.server_check_reach), probe = check?.reach)
             ProbeLine(label = stringResource(R.string.server_check_key), probe = check?.key)
             ProbeLine(label = stringResource(R.string.server_check_live), probe = check?.live)
+            val modelOkText = if (check != null) {
+                stringResource(R.string.server_models_count, check.modelCount)
+            } else {
+                null
+            }
             ProbeLine(
                 label = stringResource(R.string.server_check_models),
                 probe = check?.models,
-                okText = check?.let { stringResource(R.string.server_models_count, it.modelCount) },
+                okText = modelOkText,
             )
         }
     }

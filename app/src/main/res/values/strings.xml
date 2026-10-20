@@ -7,8 +7,6 @@
     <string name="utter_back">Back</string>
     <string name="utter_next">Next</string>
     <string name="utter_finish">Finish</string>
-    <string name="utter_coming_soon">Coming soon</string>
-    <string name="utter_coming_soon_body">This screen lands in the next build.</string>
     <string name="home_tagline">Your voice, typed anywhere.</string>
     <string name="server_title">Server</string>
     <string name="share_title">Share setup</string>
@@ -345,4 +343,110 @@
     <string name="notch_oneplus_body">Settings → Notifications &amp; status bar → Live Alerts → allow Utter. The timer appears in the capsule.</string>
     <string name="notch_samsung_title">Samsung Now Bar</string>
     <string name="notch_samsung_body">Settings → Notifications → Advanced settings → Now Bar → allow Utter. The recording chip appears on the lock screen.</string>
+
+    <!-- History (docs/plan.md Task 14) -->
+    <string name="history_pending_section">Waiting to retry</string>
+    <string name="history_seconds">%1$d s</string>
+    <string name="history_settings_title">History settings</string>
+    <string name="history_on_title">Save history</string>
+    <string name="history_on_sub">Store finished dictations on this phone.</string>
+    <string name="history_limit_title">Keep</string>
+    <string name="history_limit_50">50</string>
+    <string name="history_limit_200">200</string>
+    <string name="history_limit_1000">1000</string>
+    <string name="history_limit_forever">Forever</string>
+    <string name="history_keep_audio_title">Keep audio</string>
+    <string name="history_keep_never">Never</string>
+    <string name="history_keep_one_day">1 day</string>
+    <string name="history_keep_seven_days">7 days</string>
+    <string name="history_keep_audio_note">Kept audio can be replayed from history and is deleted after the chosen period.</string>
+    <string name="history_clear_all">Clear all history</string>
+    <string name="history_clear_title">Clear all history?</string>
+    <string name="history_clear_body">Every saved dictation on this phone is deleted. This cannot be undone.</string>
+    <string name="history_clear_confirm">Clear</string>
+    <string name="history_search_hint">Search history</string>
+    <string name="history_empty_title">No history yet</string>
+    <string name="history_empty_body">Finished dictations appear here.</string>
+    <string name="history_no_results">No matches</string>
+    <string name="history_no_results_body">Try another word or app name.</string>
+    <string name="history_copied">Copied</string>
+    <string name="history_meta">%1$s · %2$d s · %3$d ms</string>
+    <string name="history_show_raw">Show raw text</string>
+    <string name="history_hide_raw">Hide raw text</string>
+    <string name="history_play_audio">Play recording</string>
+    <string name="history_stop_audio">Stop recording</string>
+    <string name="history_delete">Delete</string>
+
+    <!-- Insights (docs/plan.md Task 14) -->
+    <string name="insights_section_totals">Totals</string>
+    <string name="insights_section_week">Last 7 days</string>
+    <string name="insights_section_apps">Top apps</string>
+    <string name="insights_stat_minutes">Minutes spoken</string>
+    <string name="insights_empty_title">No dictations yet</string>
+    <string name="insights_empty_body">Your words, minutes and time saved appear here after your first take.</string>
+    <string name="insights_no_apps">No apps yet.</string>
+    <plurals name="insights_takes_count">
+        <item quantity="one">%1$d take</item>
+        <item quantity="other">%1$d takes</item>
+    </plurals>
+
+    <!-- App rules (docs/plan.md Task 14) -->
+    <string name="rules_empty_title">No app rules yet</string>
+    <string name="rules_empty_body">Apps appear here after you dictate in them.</string>
+    <string name="rules_note">Rules apply the next time you dictate in that app.</string>
+    <string name="rules_action">Action</string>
+    <string name="rules_action_default">Default</string>
+    <string name="rules_action_raw">Raw</string>
+    <string name="rules_action_preset">Preset</string>
+    <string name="rules_preset">Preset</string>
+    <string name="rules_auto_send">Auto-send after insert</string>
+    <string name="rules_auto_send_sub">Press the field's Send action when dictation finishes.</string>
+    <string name="rules_block">Block dictation</string>
+    <string name="rules_block_sub">The panel shows a locked field in this app.</string>
+    <string name="rules_history_off">Don't keep history</string>
+    <string name="rules_history_off_sub">Takes in this app are not saved to history.</string>
+
+    <!-- Backup (docs/plan.md Task 14) -->
+    <string name="backup_section_export">Export</string>
+    <string name="backup_export_body">Save your settings as a JSON file. The API key is never included.</string>
+    <string name="backup_export_button">Export settings</string>
+    <string name="backup_section_import">Import</string>
+    <string name="backup_import_body">Restore settings from a backup. This phone's API key stays as it is.</string>
+    <string name="backup_import_button">Choose a backup</string>
+    <string name="backup_exported">Settings exported.</string>
+    <string name="backup_export_failed">Couldn't export the settings.</string>
+    <string name="backup_imported">Settings imported.</string>
+    <string name="backup_import_failed">That file is not an Utter backup.</string>
+    <string name="backup_confirm_title">Import these settings?</string>
+    <string name="backup_confirm_body">This backup changes %1$d settings. The API key is not in the backup and stays as it is.</string>
+    <string name="backup_apply">Import</string>
+
+    <!-- Diagnostics (docs/plan.md Task 14) -->
+    <string name="diag_section_events">Events</string>
+    <string name="diag_events_help">State changes, HTTP codes and timings — never text, audio or the key.</string>
+    <string name="diag_empty">No events yet.</string>
+    <string name="diag_copy">Copy</string>
+    <string name="diag_copied">Diagnostics copied</string>
+    <string name="diag_refresh">Refresh</string>
+    <string name="diag_section_device">Device</string>
+    <string name="diag_cpu">App CPU time</string>
+    <string name="diag_cpu_value">%1$d s</string>
+    <string name="diag_events_count">Buffered events</string>
+
+    <!-- About (docs/plan.md Task 14) -->
+    <string name="about_section_version">Version</string>
+    <string name="about_version">%1$s · %2$s</string>
+    <string name="about_section_whats_new">What\'s new</string>
+    <string name="about_section_update">Update</string>
+    <string name="about_check_update">Check for update</string>
+    <string name="about_checking">Checking…</string>
+    <string name="about_up_to_date">You\'re on the latest release.</string>
+    <string name="about_update_available">Update available: %1$s</string>
+    <string name="about_open_release">Open release page</string>
+    <string name="about_check_failed">Couldn\'t check for updates.</string>
+    <string name="about_section_licenses">Licenses and credits</string>
+    <string name="about_license_whisper">Whisper++ — GPL-3.0. Voice-input interaction patterns inspired by the project.</string>
+    <string name="about_license_handy">Handy — MIT. The Clean preset is adapted from Handy\'s “Improve Transcriptions” prompt.</string>
+    <string name="about_section_privacy">Privacy</string>
+    <string name="about_privacy_body">Audio goes only to the server you configure. No analytics, no account, no background uploads. History stays on this phone.</string>
 </resources>

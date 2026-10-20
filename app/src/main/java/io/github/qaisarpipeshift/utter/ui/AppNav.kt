@@ -1,20 +1,18 @@
 package io.github.qaisarpipeshift.utter.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,7 +27,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -39,12 +36,17 @@ import androidx.navigation.compose.rememberNavController
 import io.github.qaisarpipeshift.utter.Graph
 import io.github.qaisarpipeshift.utter.R
 import io.github.qaisarpipeshift.utter.data.SetupLink
-import io.github.qaisarpipeshift.utter.ui.components.SectionCard
 import io.github.qaisarpipeshift.utter.ui.onboarding.OnboardingScreen
+import io.github.qaisarpipeshift.utter.ui.screens.AboutScreen
+import io.github.qaisarpipeshift.utter.ui.screens.AppRulesScreen
 import io.github.qaisarpipeshift.utter.ui.screens.AppearanceScreen
+import io.github.qaisarpipeshift.utter.ui.screens.BackupScreen
+import io.github.qaisarpipeshift.utter.ui.screens.DiagnosticsScreen
 import io.github.qaisarpipeshift.utter.ui.screens.DictationScreen
 import io.github.qaisarpipeshift.utter.ui.screens.DictionaryScreen
+import io.github.qaisarpipeshift.utter.ui.screens.HistoryScreen
 import io.github.qaisarpipeshift.utter.ui.screens.HomeScreen
+import io.github.qaisarpipeshift.utter.ui.screens.InsightsScreen
 import io.github.qaisarpipeshift.utter.ui.screens.NotchScreen
 import io.github.qaisarpipeshift.utter.ui.screens.ServerScreen
 import io.github.qaisarpipeshift.utter.ui.screens.TextCleanupScreen
@@ -161,13 +163,13 @@ fun UtterAppNav(
             DictionaryScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.APP_RULES) {
-            PlaceholderScreen(stringResource(R.string.screen_app_rules)) { navController.navigateUp() }
+            AppRulesScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.HISTORY) {
-            PlaceholderScreen(stringResource(R.string.screen_history)) { navController.navigateUp() }
+            HistoryScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.INSIGHTS) {
-            PlaceholderScreen(stringResource(R.string.screen_insights)) { navController.navigateUp() }
+            InsightsScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.APPEARANCE) {
             AppearanceScreen(graph = graph, onBack = { navController.navigateUp() })
@@ -176,13 +178,13 @@ fun UtterAppNav(
             NotchScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.BACKUP) {
-            PlaceholderScreen(stringResource(R.string.screen_backup)) { navController.navigateUp() }
+            BackupScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.DIAGNOSTICS) {
-            PlaceholderScreen(stringResource(R.string.screen_diagnostics)) { navController.navigateUp() }
+            DiagnosticsScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.ABOUT) {
-            PlaceholderScreen(stringResource(R.string.screen_about)) { navController.navigateUp() }
+            AboutScreen(graph = graph, onBack = { navController.navigateUp() })
         }
     }
 }
@@ -201,30 +203,7 @@ fun UtterScreen(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
-                },
-                navigationIcon = {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = Icons.Rounded.ArrowBack,
-                                contentDescription = stringResource(R.string.utter_back),
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-            )
-        },
+        topBar = { UtterTopBar(title = title, onBack = onBack) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(
@@ -240,25 +219,65 @@ fun UtterScreen(
     }
 }
 
-/** A calm placeholder for a screen a later task implements (docs/plan.md Task 11). */
+/**
+ * The shared top bar: a back arrow and the screen title over the flat background.
+ *
+ * Kept private so the scrolling and lazy scaffolds cannot drift apart — both must show the same affordance and
+ * colour for predictive back to feel consistent.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlaceholderScreen(title: String, onBack: () -> Unit) {
-    UtterScreen(title = title, onBack = onBack) {
-        SectionCard(title = stringResource(R.string.utter_coming_soon)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Rounded.AutoAwesome,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp),
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = stringResource(R.string.utter_coming_soon_body),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+private fun UtterTopBar(title: String, onBack: (() -> Unit)?) {
+    TopAppBar(
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+        },
+        navigationIcon = {
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.Rounded.ArrowBack,
+                        contentDescription = stringResource(R.string.utter_back),
+                    )
+                }
             }
-        }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background,
+        ),
+    )
+}
+
+/**
+ * A lazy variant of [UtterScreen] for long lists (docs/plan.md Task 14).
+ *
+ * History can hold a thousand rows; composing all of them inside a scrolling Column would cost memory and time for
+ * nothing. The paddings and top bar are identical to [UtterScreen], so the two only differ in how content is laid
+ * out. The keyboard inset keeps the search field visible while typing.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun UtterListScreen(
+    title: String,
+    onBack: (() -> Unit)?,
+    content: LazyListScope.() -> Unit,
+) {
+    Scaffold(
+        topBar = { UtterTopBar(title = title, onBack = onBack) },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .imePadding(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content,
+        )
     }
 }

@@ -558,6 +558,7 @@ class DictationController(
                         durationMs = started.durationMs,
                         latencyMs = speech.latencyMs,
                         words = words,
+                        audioId = started.id,
                     ),
                 )
             }

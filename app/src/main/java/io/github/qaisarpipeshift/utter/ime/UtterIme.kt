@@ -33,7 +33,6 @@ import io.github.qaisarpipeshift.utter.Graph
 import io.github.qaisarpipeshift.utter.ui.MainActivity
 import io.github.qaisarpipeshift.utter.UtterApp
 import io.github.qaisarpipeshift.utter.audio.AndroidRecorder
-import io.github.qaisarpipeshift.utter.core.Cleaner
 import io.github.qaisarpipeshift.utter.core.DictationController
 import io.github.qaisarpipeshift.utter.core.EnterAction
 import io.github.qaisarpipeshift.utter.core.FieldInfo
@@ -45,7 +44,6 @@ import io.github.qaisarpipeshift.utter.core.TakeAction
 import io.github.qaisarpipeshift.utter.core.TakeRequest
 import io.github.qaisarpipeshift.utter.data.Settings
 import io.github.qaisarpipeshift.utter.data.ThemeMode
-import io.github.qaisarpipeshift.utter.net.CleanResult
 import io.github.qaisarpipeshift.utter.notify.LiveStatus
 import io.github.qaisarpipeshift.utter.ui.theme.UtterTheme
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -128,13 +126,7 @@ class UtterIme :
             settings = { graph.settings.current() },
             recorder = AndroidRecorder(this, { graph.settings.current() }, graph.diag),
             transcriber = graph.api,
-            cleaner = object : Cleaner {
-                override suspend fun clean(message: String): CleanResult {
-                    val snapshot = graph.settings.current()
-                    val model = snapshot.cleanModel.ifBlank { DEFAULT_CLEAN_MODEL }
-                    return graph.api.clean(model, message, snapshot.cleanTimeoutMs)
-                }
-            },
+            cleaner = graph.cleaner,
             inserter = inputOps,
             pending = graph.pending,
             history = graph.history,
@@ -483,9 +475,6 @@ class UtterIme :
     }
 
     private companion object {
-        /** The server's documented cleanup model (docs/spec.md §6) until the user picks one. */
-        const val DEFAULT_CLEAN_MODEL = "cleanup"
-
         /** How long the hold-only hint stays in the status strip. */
         const val HOLD_HINT_MS = 1_800L
     }

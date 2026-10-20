@@ -27,6 +27,8 @@ data class HistoryEntry(
     val durationMs: Long,
     val latencyMs: Long,
     val words: Int,
+    /** Take id whose kept PCM can be replayed; null for entries written before audio was linked. */
+    val audioId: String? = null,
 )
 
 /**
@@ -140,6 +142,7 @@ class HistoryStore(
         .put("durationMs", entry.durationMs)
         .put("latencyMs", entry.latencyMs)
         .put("words", entry.words)
+        .put("audioId", entry.audioId ?: JSONObject.NULL)
         .toString()
 
     private fun parse(line: String): HistoryEntry? {
@@ -162,6 +165,7 @@ class HistoryStore(
             durationMs = root.optLong("durationMs", 0),
             latencyMs = root.optLong("latencyMs", 0),
             words = root.optInt("words", 0),
+            audioId = root.opt("audioId") as? String,
         )
     }
 

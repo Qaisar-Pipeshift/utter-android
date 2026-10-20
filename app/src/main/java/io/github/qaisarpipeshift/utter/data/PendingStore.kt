@@ -57,6 +57,39 @@ class PendingStore(
     /** Where the recorder wrote, or would write, the PCM of [id]; the controller needs it to retry a kept take. */
     fun pcmFile(id: String): File = File(takesDir, "$id$PCM_SUFFIX")
 
+    /** Kept audio for history replay; the file exists only while keep-audio is on. */
+    fun audioFile(id: String): File = File(audioDir, "$id$PCM_SUFFIX")
+
+    /** Take ids whose kept audio is present in `filesDir/audio/`. */
+    suspend fun keptAudioIds(): Set<String> = withContext(io) {
+        mutex.withLock {
+            audioDir.listFiles()
+                ?.asSequence()
+                ?.filter { it.isFile && it.name.endsWith(PCM_SUFFIX) }
+                ?.map { it.name.removeSuffix(PCM_SUFFIX) }
+                ?.toSet()
+                .orEmpty()
+        }
+    }
+
+    /** Deletes one kept clip when its history entry is deleted. */
+    suspend fun deleteAudio(id: String) {
+        withContext(io) {
+            mutex.withLock { audioFile(id).delete() }
+        }
+    }
+
+    /** Deletes every kept clip when the user turns keep-audio off. */
+    suspend fun clearAudio() {
+        withContext(io) {
+            mutex.withLock {
+                audioDir.listFiles()?.forEach { file ->
+                    if (file.isFile) file.delete()
+                }
+            }
+        }
+    }
+
     /** Pending takes, newest first. */
     suspend fun list(): List<PendingMeta> = withContext(io) {
         mutex.withLock { readAll().sortedByDescending { it.createdAt } }

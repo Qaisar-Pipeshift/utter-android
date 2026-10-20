@@ -1,0 +1,6 @@
+Utter 0.1
+
+- Dictate into any app with your own speech server.
+- Live text, cleanup presets, a dictionary and per-app rules.
+- History, pending-take retry, insights and kept-audio replay.
+- A calm Handy-style panel with notch status while recording.
