@@ -19,6 +19,8 @@
     <string name="utter_discard">Discard</string>
     <string name="utter_offline">Offline</string>
     <string name="utter_pending">%1$d to retry</string>
+    <string name="utter_copied">Copied — field was closed</string>
+    <string name="utter_hold_to_talk">Hold to talk</string>
 
     <!-- Panel: failures -->
     <string name="utter_fail_offline">You\'re offline</string>

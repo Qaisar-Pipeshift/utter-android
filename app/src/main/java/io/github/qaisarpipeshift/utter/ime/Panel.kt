@@ -61,6 +61,7 @@ interface PanelHost {
     fun onMicLock()
     fun onClean(presetId: String?)
     fun onBackspace()
+    fun onDeleteWord()
     fun onSpace()
     fun onEnter()
     fun onUndo()
@@ -98,6 +99,7 @@ fun Panel(
     settings: Settings,
     selectionAvailable: Boolean,
     enterAction: EnterAction,
+    holdHint: Boolean,
     host: PanelHost,
 ) {
     var showPresets by remember { mutableStateOf(false) }
@@ -163,6 +165,7 @@ fun Panel(
                     else -> {
                         StatusStrip(
                             state = state,
+                            holdHint = holdHint,
                             onRetry = host::onRetry,
                             onDiscard = host::onDiscard,
                             onUndo = host::onUndo,
@@ -224,6 +227,7 @@ private fun ControlRow(
             BackspaceKey(
                 enabled = state !is PanelState.Finishing,
                 onBackspace = host::onBackspace,
+                onDeleteWord = host::onDeleteWord,
             )
         }
         MicButton(

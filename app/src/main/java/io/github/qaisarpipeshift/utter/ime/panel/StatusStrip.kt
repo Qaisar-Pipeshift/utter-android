@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.collect
 @Composable
 fun StatusStrip(
     state: PanelState,
+    holdHint: Boolean,
     onRetry: (String) -> Unit,
     onDiscard: (String) -> Unit,
     onUndo: () -> Unit,
@@ -53,7 +54,7 @@ fun StatusStrip(
             is PanelState.Recording -> LiveText(state)
             is PanelState.Finishing -> StripText(stringResource(R.string.utter_transcribing))
             is PanelState.Failed -> FailedStrip(state, onRetry, onDiscard)
-            is PanelState.Idle -> IdleStrip(state, onUndo, onSwap)
+            is PanelState.Idle -> IdleStrip(state, holdHint, onUndo, onSwap)
             else -> Unit
         }
     }
@@ -88,9 +89,9 @@ private fun LiveText(state: PanelState.Recording) {
 }
 
 @Composable
-private fun IdleStrip(state: PanelState.Idle, onUndo: () -> Unit, onSwap: () -> Unit) {
+private fun IdleStrip(state: PanelState.Idle, holdHint: Boolean, onUndo: () -> Unit, onSwap: () -> Unit) {
     val result = state.result
-    if (result == null && state.pendingCount == 0 && !state.offline) {
+    if (result == null && state.pendingCount == 0 && !state.offline && !holdHint) {
         StripText(stringResource(R.string.utter_panel_hint), muted = true)
         return
     }
@@ -99,6 +100,9 @@ private fun IdleStrip(state: PanelState.Idle, onUndo: () -> Unit, onSwap: () -> 
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (holdHint) {
+            Chip(label = stringResource(R.string.utter_hold_to_talk), muted = true)
+        }
         if (result != null) {
             ResultStatusChip(result)
             if (result.canSwap && !result.noSpeech) {
@@ -126,6 +130,11 @@ private fun IdleStrip(state: PanelState.Idle, onUndo: () -> Unit, onSwap: () -> 
 private fun ResultStatusChip(result: ResultChip) {
     if (result.noSpeech) {
         Chip(label = stringResource(R.string.utter_no_speech), muted = true)
+        return
+    }
+    // canUndo is exactly "the insert reached the field"; false means the text went to the clipboard instead.
+    if (!result.canUndo) {
+        Chip(label = stringResource(R.string.utter_copied), muted = true)
         return
     }
     val label = stringResource(

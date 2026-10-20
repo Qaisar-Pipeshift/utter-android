@@ -6,6 +6,7 @@ A = "{http://schemas.android.com/apk/res/android}"
 MANIFEST = "app/src/main/AndroidManifest.xml"
 ALLOWED_PERMISSIONS = {
     "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
     "android.permission.RECORD_AUDIO",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.POST_PROMOTED_NOTIFICATIONS",

@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -48,8 +50,10 @@ import io.github.qaisarpipeshift.utter.ui.theme.UtterTheme
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
@@ -98,6 +102,10 @@ class UtterIme :
     private val selectionState = MutableStateFlow<String?>(null)
     private val fieldState = MutableStateFlow<FieldInfo?>(null)
 
+    /** Shown briefly when a tap lands in hold-only mode instead of starting a take. */
+    private val holdHint = MutableStateFlow(false)
+    private var holdHintJob: Job? = null
+
     private var lastControllerState: PanelState = PanelState.Idle(null, 0, false)
 
     /** False until the first settings emission has been read, so nothing decides "setup needed" on defaults. */
@@ -129,9 +137,7 @@ class UtterIme :
             pending = graph.pending,
             history = graph.history,
             stats = graph.stats,
-            // The manifest gate allows exactly four permissions, so network state cannot be read here; a dead
-            // network surfaces as a failed upload and keeps the take for Retry, which is the same safety net.
-            isOnline = { true },
+            isOnline = ::isOnline,
             haptic = ::performHaptic,
             diag = graph.diag,
         )
@@ -173,6 +179,7 @@ class UtterIme :
                 val state by uiState.collectAsState()
                 val selection by selectionState.collectAsState()
                 val field by fieldState.collectAsState()
+                val holdHintNow by holdHint.collectAsState()
                 val dark = when (settings.theme) {
                     ThemeMode.SYSTEM -> isSystemInDarkTheme()
                     ThemeMode.LIGHT -> false
@@ -184,6 +191,7 @@ class UtterIme :
                         settings = settings,
                         selectionAvailable = selection != null,
                         enterAction = field?.actionLabel ?: EnterAction.NEWLINE,
+                        holdHint = holdHintNow,
                         host = this@UtterIme,
                     )
                 }
@@ -257,7 +265,12 @@ class UtterIme :
         when (lastControllerState) {
             is PanelState.Recording -> controller.stop()
             is PanelState.Finishing -> Unit
-            else -> startTake(TakeAction.RAW)
+            else -> if (graph.settings.current().tapHandsFree) {
+                startTake(TakeAction.RAW)
+            } else {
+                // Hold-only mode: a tap explains the gesture instead of starting a take.
+                showHoldHint()
+            }
         }
     }
 
@@ -292,6 +305,10 @@ class UtterIme :
 
     override fun onBackspace() {
         inputOps.backspace()
+    }
+
+    override fun onDeleteWord() {
+        inputOps.deleteWord()
     }
 
     override fun onSpace() {
@@ -372,6 +389,23 @@ class UtterIme :
         selectionState.value = if (secureField) null else inputOps.selection()
     }
 
+    /** One-shot network check at record start (docs/spec.md §17): a capability read, never a callback. */
+    private fun isOnline(): Boolean {
+        val manager = getSystemService(ConnectivityManager::class.java) ?: return true
+        val network = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private fun showHoldHint() {
+        holdHint.value = true
+        holdHintJob?.cancel()
+        holdHintJob = imeScope.launch {
+            delay(HOLD_HINT_MS)
+            holdHint.value = false
+        }
+    }
+
     /** The key lives in the Keystore, not in settings, so a fresh setup is noticed when the panel is shown again. */
     private fun refreshKeyPresence() {
         if (!::graph.isInitialized) return
@@ -445,5 +479,8 @@ class UtterIme :
     private companion object {
         /** The server's documented cleanup model (docs/spec.md §6) until the user picks one. */
         const val DEFAULT_CLEAN_MODEL = "cleanup"
+
+        /** How long the hold-only hint stays in the status strip. */
+        const val HOLD_HINT_MS = 1_800L
     }
 }

@@ -42,7 +42,7 @@ Fail → **build Utter** from this spec.
 | G2 | Battery: Utter < 1 % per day, 0 min background use | Android Settings → Battery, after 24 h |
 | G3 | Never loses a dictation (network drop, server down, field closed) | failure table §8, device checks D6–D8 |
 | G4 | Nothing secret or deployment-specific in the repo | CI gates §10 |
-| G5 | Thin: APK ≤ 5 MB (build path; fork path ≈ 5.7 MB accepted), 4 permissions | CI artifact size, manifest gate |
+| G5 | Thin: APK ≤ 5 MB (build path; fork path ≈ 5.7 MB accepted), 5 permissions | CI artifact size, manifest gate |
 | G6 | Clean, Handy-like look | §9 tokens, Qais's eye |
 | G7 | Recording status in the notch: OnePlus Live Alerts capsule / Samsung Now Bar | device checks D11–D12 |
 | G8 | Same experience on Samsung (Samsung Keyboard or Gboard) | device check D12 |
@@ -97,7 +97,7 @@ Install on Samsung: **Auto Blocker** (Settings → Security and privacy → Auto
 |---|---|
 | API | `NotificationCompat.Builder.requestPromotedOngoing(true)`; ongoing; content title set; Standard style; `setUsesChronometer(true)` + `setWhen(start)`; no custom view; not a group summary |
 | Channel | "Recording status", importance DEFAULT, no sound, no vibration |
-| Permissions | `POST_NOTIFICATIONS` (runtime, wizard asks) · `POST_PROMOTED_NOTIFICATIONS` (manifest) |
+| Permissions | `POST_NOTIFICATIONS` (runtime, wizard asks) · `POST_PROMOTED_NOTIFICATIONS` (manifest) · `ACCESS_NETWORK_STATE` (install-time; one-shot offline check at record start) |
 | Lifetime | only Recording → Finishing (+10 s on Failed); **zero cost when idle** |
 | Android < 16 / not promoted | plain ongoing notification — same content, no capsule |
 | OnePlus | third-party Live Alerts are **off per app by default**: Settings → Notifications & Quick Settings → Live Alerts → Utter on (wizard deep-links + tip) |
@@ -254,7 +254,7 @@ Flat, rounded (16 dp), one accent, no gradients, no idle animation; waveform rin
 |---|---|
 | No secrets in tree or history | `gitleaks` (full history) |
 | No deployment-specific strings (company domains, IPs, key-like hex ≥ 32) | `scripts/check_public_hygiene.sh` (grep allow-list) |
-| Permissions = `INTERNET`, `RECORD_AUDIO`, `POST_NOTIFICATIONS`, `POST_PROMOTED_NOTIFICATIONS` only | `scripts/check_manifest.sh` |
+| Permissions = `INTERNET`, `ACCESS_NETWORK_STATE`, `RECORD_AUDIO`, `POST_NOTIFICATIONS`, `POST_PROMOTED_NOTIFICATIONS` only | `scripts/check_manifest.sh` |
 | No background work: no `Service` except the IME, no `WakeLock`, `WorkManager`, `AlarmManager`, `JobScheduler`, `foregroundServiceType`, `BOOT_COMPLETED`, `Timer`/polling loops | `scripts/check_battery_rules.sh` (grep) |
 | Key never leaves the app: `allowBackup=false` + data-extraction rules exclude everything; no `Log` of key/text/audio; R8 strips `Log.d/v/i` in release | manifest gate + grep + proguard rule |
 | HTTPS only | network security config `cleartextTrafficPermitted=false` |

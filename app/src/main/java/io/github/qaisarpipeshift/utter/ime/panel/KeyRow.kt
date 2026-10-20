@@ -1,6 +1,8 @@
 package io.github.qaisarpipeshift.utter.ime.panel
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -97,20 +100,24 @@ fun KeyRow(
 }
 
 /**
- * Backspace with hold-to-repeat (docs/spec.md §4).
+ * Backspace with hold-to-repeat and swipe-left-to-delete-a-word (docs/spec.md §4).
  *
  * Why a state flag instead of a timer: the repeat loop is a coroutine that dies with the composition, so it cannot
- * outlive the panel and cannot keep the keyboard awake; a `Timer` would do both.
+ * outlive the panel and cannot keep the keyboard awake; a `Timer` would do both. The swipe is measured from the
+ * finger's own down point, so a sloppy tap on a 48 dp key never turns into a word deletion.
  */
 @Composable
 fun BackspaceKey(
     enabled: Boolean,
     onBackspace: () -> Unit,
+    onDeleteWord: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val swipePx = with(LocalDensity.current) { (-32).dp.toPx() }
     var held by remember { mutableStateOf(false) }
     val enabledNow by rememberUpdatedState(enabled)
     val backspaceNow by rememberUpdatedState(onBackspace)
+    val deleteWordNow by rememberUpdatedState(onDeleteWord)
     LaunchedEffect(held) {
         if (!held) return@LaunchedEffect
         delay(REPEAT_DELAY_MS)
@@ -125,16 +132,31 @@ fun BackspaceKey(
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
             .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        if (enabledNow) {
-                            backspaceNow()
-                            held = true
-                            tryAwaitRelease()
-                            held = false
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    if (!enabledNow) return@awaitEachGesture
+                    backspaceNow()
+                    held = true
+                    var swiped = false
+                    var pressed = true
+                    while (pressed) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id }
+                        if (change == null || !change.pressed) {
+                            change?.consume()
+                            pressed = false
+                            continue
                         }
-                    },
-                )
+                        change.consume()
+                        if (!swiped && change.position.x - down.position.x <= swipePx) {
+                            swiped = true
+                            held = false
+                            deleteWordNow()
+                        }
+                    }
+                    held = false
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
