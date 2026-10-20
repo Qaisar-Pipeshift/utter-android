@@ -258,6 +258,7 @@ Flat, rounded (16 dp), one accent, no gradients, no idle animation; waveform rin
 | No deployment-specific strings (company domains, IPs, key-like hex ≥ 32) | `scripts/check_public_hygiene.sh` (grep allow-list) |
 | Permissions = `INTERNET`, `ACCESS_NETWORK_STATE`, `RECORD_AUDIO`, `POST_NOTIFICATIONS`, `POST_PROMOTED_NOTIFICATIONS` only | `scripts/check_manifest.sh` |
 | No background work: no `Service` except the IME, no `WakeLock`, `WorkManager`, `AlarmManager`, `JobScheduler`, `foregroundServiceType`, `BOOT_COMPLETED`, `Timer`/polling loops | `scripts/check_battery_rules.sh` (grep) |
+| The merged release manifest adds no component outside `io.github.qaisarpipeshift.utter.*` and the two known AndroidX ones (`androidx.startup.InitializationProvider`, `androidx.profileinstaller.ProfileInstallReceiver`), and no permission outside the five | `scripts/check_merged_manifest.py` (after `assembleRelease`) |
 | Key never leaves the app: `allowBackup=false` + data-extraction rules exclude everything; no `Log` of key/text/audio; R8 strips `Log.d/v/i` in release | manifest gate + grep + proguard rule |
 | HTTPS only | network security config `cleartextTrafficPermitted=false` |
 | Supply chain: GitHub Actions pinned by commit SHA; signing secrets only in the release job; PRs from forks never see secrets | workflow review |

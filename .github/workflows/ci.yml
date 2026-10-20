@@ -48,6 +48,8 @@ jobs:
           gradle-version: "9.8.1"
       - name: Lint, unit tests, debug + release builds
         run: gradle --no-daemon --stacktrace :app:lintDebug :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease
+      - name: Merged release manifest components
+        run: python3 -I scripts/check_merged_manifest.py
       - name: APK size (spec G5)
         run: ls -l app/build/outputs/apk/release/*.apk app/build/outputs/apk/debug/*.apk
       - name: Screenshots (panel, Appearance, Home, Onboarding)
