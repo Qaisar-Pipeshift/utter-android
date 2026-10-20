@@ -20,6 +20,9 @@ import javax.crypto.spec.GCMParameterSpec
  * Why a memory cache: every take reads the config on the main thread, and a Keystore decrypt is slow enough to show
  * as a stutter on the first chunk. The plaintext never outlives the process, is invalidated by [save] and [clear],
  * and is never logged.
+ *
+ * A decrypt failure is deliberately not cached: a transient Keystore error (an OEM hiccup, a locked profile) would
+ * otherwise keep the user locked out until they re-entered the key. Only a definite "no key stored" is remembered.
  */
 class SecretStore(context: Context, private val diag: Diag = Diag()) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -28,6 +31,7 @@ class SecretStore(context: Context, private val diag: Diag = Diag()) {
     @Volatile
     private var cached: String? = null
 
+    /** True only for a definite answer: a key was kept, or no key is stored. A failure leaves it false to retry. */
     @Volatile
     private var loaded = false
 
@@ -66,8 +70,8 @@ class SecretStore(context: Context, private val diag: Diag = Diag()) {
             loaded = true
             key
         } catch (failure: Exception) {
+            // Deliberately not cached: the next call retries the Keystore instead of locking the user out.
             diag.event("secret_unreadable", failure.javaClass.simpleName)
-            loaded = true
             null
         }
     }
