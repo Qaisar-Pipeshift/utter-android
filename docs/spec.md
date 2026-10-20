@@ -162,7 +162,11 @@ State machine (one dictation at a time):
 | `ui/MainActivity.kt` | First-run setup wizard + settings screens | data, net |
 | `ui/Theme.kt` | §9 tokens, light/dark | — |
 
-Deps allowed: AndroidX core, activity-compose, Compose BOM (material3), lifecycle, OkHttp, kotlinx-coroutines, kotlinx-serialization-json. Anything else → ask first.
+Deps allowed: AndroidX core-ktx, activity-compose, Compose BOM (material3, material-icons-extended — R8 strips unused), lifecycle (runtime/viewmodel-compose), navigation-compose (predictive back), datastore-preferences, OkHttp (+ mockwebserver for tests), kotlinx-coroutines, kotlinx-serialization-json, desugar_jdk_libs. **Not allowed:** WorkManager, Room/KSP, Firebase/analytics, Gson, Ktor. Anything else → ask first.
+
+Toolchain (pinned from a project whose CI was green 2026-10-15): Gradle 9.8.1 · AGP 9.4.1 (built-in Kotlin) · Kotlin 2.4.21 · Compose BOM 2026.09.00 · compileSdk 37 · targetSdk 36 · minSdk 28 · JDK 17 · OkHttp 5.5.0 · coroutines 1.11.0 · lifecycle 2.11.0 · navigation-compose 2.10.2 · datastore 1.2.1 · activity-compose 1.13.0 · core-ktx 1.19.1.
+
+License GPL-3.0 (same as Whisper++, so its code may be borrowed with attribution in About → Licenses).
 
 ## 6 · Wire protocol (exact — matches the Handy fork and the server code)
 
@@ -302,3 +306,103 @@ push / PR ──► gitleaks ─► hygiene ─► manifest ─► battery ─�
 | `claude-ds` worker (herdr pane) | implements plan tasks; commits locally, never pushes |
 | GitHub CI | compiler + gates (no Android SDK on the host) |
 | Qais | approves repo creation + secrets, installs APK, device checks D1–D10 |
+
+## 15 · Feature catalog (v1 = everything below)
+
+Source: **H** = Handy (desktop, our fork) · **W** = Whisper++ · **N** = new for Utter. Priority = build order (P1 first). Every feature is on-demand only — none adds background work.
+
+### 15.1 Dictation (panel)
+
+| Feature | Src | Default | P |
+|---|---|---|---|
+| 🎙 raw / ✨ cleaned buttons (Handy's two shortcuts) | H | — | P1 |
+| Tap = hands-free start/stop · hold = push-to-talk (hold threshold 300 ms, adjustable 150–800) | H W | both on | P1 |
+| While holding: slide ← cancel · slide ↑ lock hands-free | W | on | P2 |
+| Live text (WSS) with committed (solid) + tentative (faded) | H | on | P1 |
+| Live text shown in panel strip / field (composing) | N | panel | P2 |
+| Waveform ring (10 Hz amplitude, animated only while recording) + elapsed timer | W | on | P1 |
+| Auto-start recording when panel opens | N | off | P2 |
+| Max take 295 s, warning haptic at 280 s | N | — | P1 |
+| Pause / duck other audio while recording (transient audio focus) | H W | on | P2 |
+| Start/stop sounds (start cue before mic opens, stop cue after mic closes — never recorded) | H | off | P3 |
+| Keep recording after release 0–500 ms (Handy's extra buffer; 500 ms caused the chime bug) | H | 0 ms | P3 |
+| Microphone: Auto / built-in / wired-USB headset (`AudioRecord.setPreferredDevice`) | H | Auto | P3 |
+| Haptics: press, start, stop, cancel, lock, error | W | on | P1 |
+| Clean while I pause (speculative cleanup at each all-final pause, used only if final text identical) | H | off | P3 |
+
+### 15.2 Text and editing
+
+| Feature | Src | Default | P |
+|---|---|---|---|
+| Smart spacing (leading space when needed) · trailing space | H | on · off | P1 |
+| Capitalize first letter at sentence start | N | on | P2 |
+| Filler-word removal for raw text (um, uh, er, ah + custom list) | H | on | P2 |
+| Word replacements (find → replace, whole-word, case-insensitive) applied before cleanup | W | — | P2 |
+| Vocabulary / custom words → server hints (`keyterms_prompt` on upload, `transcription.prompt` on live) | H W | — | P2 |
+| Cleanup presets: Clean (default, Handy prompt) · Formal · Casual · Bullet list · Email · Translate → English · custom (CRUD, reorder) | H W | Clean | P2 |
+| Long-press ✨ → preset picker (sheet in panel) | W | — | P2 |
+| **Voice edit**: text selected in the field → ✨ becomes "Edit selection": speak an instruction, LLM rewrites the selection, replaces it (undoable) | W | on | P3 |
+| Undo last insert (↶) · re-insert last result (⟲ chip) | N | — | P1 |
+| Auto-Enter / send after insert | H | off | P1 |
+| Also copy result to clipboard | H | off | P2 |
+| Return to previous keyboard after insert | N | on | P1 |
+
+### 15.3 Per-app rules and privacy
+
+| Feature | Src | Default | P |
+|---|---|---|---|
+| Secure fields (password, OTP, `IME_FLAG_NO_PERSONALIZED_LEARNING` incognito) → mic disabled, history off | W | always | P1 |
+| App rules (per package): default action raw / preset · auto-send · block dictation · history off; app list built from apps Utter was used in (no `QUERY_ALL_PACKAGES`) | W | — | P3 |
+| History of an incognito field never stored | W | always | P1 |
+
+### 15.4 History, retry and insights
+
+| Feature | Src | Default | P |
+|---|---|---|---|
+| Pending takes queue: failed take saved as PCM in app cache, Retry / Discard in panel + app, survives IME/process death, auto-purged after 24 h | W | — | P1 |
+| History: searchable, grouped by day; shows raw + cleaned, app, duration, latency; tap = copy; swipe = delete | H W | on | P2 |
+| History limit 50 / 200 / 1000 / forever | H | 200 | P2 |
+| Keep audio with history: never / 1 day / 7 days (replay + re-transcribe) | H | never | P3 |
+| Insights: words, minutes spoken, time saved (vs 40 wpm typing), dictations per day (7-day bars, Compose Canvas), top apps | W | — | P3 |
+
+### 15.5 Server, status, settings app
+
+| Feature | Src | Default | P |
+|---|---|---|---|
+| Onboarding wizard (6 steps, §7) with progress dots | H W | — | P1 |
+| Server: URL + key; **Check** runs 4 probes with ✓/✗ + ms: reach `/warm` · key `/v2/transcript` · live socket handshake · cleanup model `/v1/models` | H W | — | P1 |
+| Cleanup model: picked from `/v1/models` (fallback: free text) · timeout | H | first listed | P2 |
+| Home dashboard: server status card, quick toggles (Live, Notch, Auto-return), today's stats, "Try it" field | N | — | P2 |
+| Notch Live Update (§3b) + OEM setup guide | N | on | P2 |
+| Appearance: theme system/light/dark · palette Handy pink / Material You dynamic · panel height compact/normal/tall | H W | system · Handy · normal | P2 |
+| Backup / restore settings as JSON via Storage Access Framework (API key never exported) | W | — | P3 |
+| Diagnostics: last 100 events (state changes, HTTP codes, timings, Android error codes — **never text or audio**), Copy diagnostics | H | — | P2 |
+| About: version + commit, What's new (release notes bundled), Check for update (one GitHub API call on tap → opens the release page), licenses | H W | — | P3 |
+| Edge-to-edge, predictive back on every screen, TalkBack labels, large-font safe | W | — | P1 |
+
+### 15.6 Explicitly NOT built (declared)
+
+Multiple providers (one server only) · on-device models · Auto-Learn dictionary · translations of the UI · in-app APK self-update · tablet layouts beyond responsive Compose · language selection (server auto-detects; measured WER uses auto).
+
+## 16 · Screens
+
+```
+App (MainActivity, navigation-compose, predictive back)
+ ├─ Onboarding: Server → Mic → Notifications → Enable keyboard → Try it → Tips for this phone
+ └─ Home ─┬─ Server            (URL, key, Check ×4, cleanup model, timeouts)
+          ├─ Dictation         (gestures, live, auto-start, audio focus, sounds, mic, max length, speculative)
+          ├─ Text & cleanup    (spacing, capitalize, fillers, presets CRUD, voice edit, auto-enter, clipboard, auto-return)
+          ├─ Dictionary        (vocabulary, replacements)
+          ├─ App rules         (per-app action, auto-send, block, history off)
+          ├─ History           (search, pending takes, retention, keep audio)
+          ├─ Insights          (stats, 7-day bars, top apps)
+          ├─ Appearance        (theme, palette, panel height, haptics)
+          ├─ Notch status      (toggle, OEM guide)
+          ├─ Backup            (export / import)
+          ├─ Diagnostics       (events, copy)
+          └─ About             (version, what's new, update check, licenses, privacy)
+
+Panel (IME) states: Setup needed · Secure field · Idle · Recording(hands-free | holding) · Finishing · Result chips · Failed(+Retry) · Preset sheet · Voice edit
+```
+
+Style: Handy tokens (§9) as the default palette; 16 dp radius cards; one accent; generous spacing; icons from material-icons-extended (rounded set); motion only on state change (≤ 250 ms), none while idle.
