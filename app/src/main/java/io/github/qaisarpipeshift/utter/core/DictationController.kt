@@ -44,8 +44,18 @@ interface Cleaner {
     suspend fun clean(message: String): CleanResult
 }
 
-/** Where a result goes: the field the take started in, and whether it replaces the selected text. */
-data class InsertMeta(val field: FieldInfo, val replaceSelection: Boolean = false)
+/**
+ * Where a result goes: the field the take started in, and whether it replaces the selected text.
+ *
+ * [selection] is the text that was selected when the take started. The IME compares it with the live selection at
+ * insert time, so a voice edit is committed only while the same text is still selected; otherwise the result goes to
+ * the clipboard instead of overwriting whatever the user selected meanwhile.
+ */
+data class InsertMeta(
+    val field: FieldInfo,
+    val replaceSelection: Boolean = false,
+    val selection: String? = null,
+)
 
 /** Text insertion behind one port; the IME implements it on the current input connection. */
 interface Inserter {
@@ -526,7 +536,7 @@ class DictationController(
 
     private suspend fun insertDone(started: Take, speech: SttResult.Text, done: Completion.Done) {
         val snapshot = started.settings
-        val meta = InsertMeta(started.field, done.replaceSelection)
+        val meta = InsertMeta(started.field, done.replaceSelection, started.request.selection)
         val inserted = guarded(false) { inserter.insert(done.text, meta) }
         diag.event(if (inserted) "insert" else "insert_clipboard")
 
@@ -796,6 +806,9 @@ class DictationController(
         val settings: Settings,
     ) {
         var durationMs: Long = 0
+
+        /** The field the take was started in; every result path reads it from the captured request. */
+        val field: FieldInfo get() = request.field
     }
 
     private sealed interface Completion {

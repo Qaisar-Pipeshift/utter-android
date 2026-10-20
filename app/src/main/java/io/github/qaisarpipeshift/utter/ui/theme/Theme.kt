@@ -5,6 +5,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /** Handy's tokens (docs/spec.md §9). */
@@ -48,7 +50,15 @@ private val Dark = darkColorScheme(
     error = UtterColors.ErrorDark,
 )
 
+/**
+ * Whether the current [UtterTheme] is dark. Tokens that Material 3 has no slot for — the warning colour of the
+ * panel's elapsed timer — are picked from [UtterColors] through this local, so a forced theme beats the system one.
+ */
+val LocalUtterDark = staticCompositionLocalOf { false }
+
 @Composable
 fun UtterTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
+    CompositionLocalProvider(LocalUtterDark provides dark) {
+        MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
+    }
 }

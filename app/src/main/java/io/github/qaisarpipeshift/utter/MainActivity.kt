@@ -21,6 +21,13 @@ import io.github.qaisarpipeshift.utter.ui.theme.UtterTheme
 
 /** Scaffold screen: replaced by onboarding + settings (docs/plan.md, Tasks 11–14). */
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        /** Extra naming the onboarding step to open; the IME's "Grant mic" uses [STEP_MIC]. */
+        const val EXTRA_ONBOARDING_STEP = "onboarding_step"
+        const val STEP_MIC = "mic"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)

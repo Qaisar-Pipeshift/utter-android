@@ -2,4 +2,66 @@
 <resources>
     <string name="app_name">Utter</string>
     <string name="ime_subtype_label">Utter voice</string>
+
+    <!-- Panel: live and result states -->
+    <string name="utter_panel_hint">Tap the mic, or hold it to talk</string>
+    <string name="utter_listening">Listening…</string>
+    <string name="utter_transcribing">Transcribing…</string>
+    <string name="utter_no_speech">No speech</string>
+    <string name="utter_inserted">Inserted</string>
+    <string name="utter_cleaned">Cleaned</string>
+    <string name="utter_not_cleaned">Not cleaned</string>
+    <string name="utter_result_chip">%1$s · %2$d ms</string>
+    <string name="utter_raw">Raw</string>
+    <string name="utter_clean_it">Clean it</string>
+    <string name="utter_undo">Undo last insert</string>
+    <string name="utter_retry">Retry</string>
+    <string name="utter_discard">Discard</string>
+    <string name="utter_offline">Offline</string>
+    <string name="utter_pending">%1$d to retry</string>
+
+    <!-- Panel: failures -->
+    <string name="utter_fail_offline">You\'re offline</string>
+    <string name="utter_fail_unreachable">Can\'t reach server</string>
+    <string name="utter_fail_key">Key rejected</string>
+    <string name="utter_fail_stt">Speech-to-text unavailable</string>
+    <string name="utter_fail_server">Server error</string>
+    <string name="utter_fail_recorder">Microphone error</string>
+    <string name="utter_fail_recorder_code">Microphone error (%1$d)</string>
+    <string name="utter_fail_short">Too short</string>
+
+    <!-- Panel: keys and gestures -->
+    <string name="utter_start_dictation">Start dictation</string>
+    <string name="utter_stop_dictation">Stop dictation</string>
+    <string name="utter_cancel_dictation">Cancel dictation</string>
+    <string name="utter_lock_hands_free">Lock hands-free</string>
+    <string name="utter_backspace">Backspace</string>
+    <string name="utter_space">space</string>
+    <string name="utter_switch_keyboard">Switch keyboard</string>
+    <string name="utter_open_settings">Open settings</string>
+    <string name="utter_enter_newline">Enter</string>
+    <string name="utter_enter_send">Send</string>
+    <string name="utter_enter_search">Search</string>
+    <string name="utter_enter_go">Go</string>
+    <string name="utter_enter_next">Next</string>
+    <string name="utter_enter_done">Done</string>
+    <string name="utter_clean_dictation">Clean dictation</string>
+    <string name="utter_edit_selection">Edit selection</string>
+    <string name="utter_edit_label">Edit</string>
+
+    <!-- Panel: preset sheet -->
+    <string name="utter_presets_title">Clean with preset</string>
+    <string name="utter_preset_selected">Selected preset</string>
+
+    <!-- Panel: setup, permission and secure field -->
+    <string name="utter_setup_icon">Setup</string>
+    <string name="utter_setup_title">Set up Utter</string>
+    <string name="utter_setup_body">Add your server URL and key to start dictating.</string>
+    <string name="utter_setup_button">Open setup</string>
+    <string name="utter_mic_needed_title">Microphone access needed</string>
+    <string name="utter_mic_needed_body">Allow the microphone so Utter can hear you.</string>
+    <string name="utter_grant_mic">Grant mic</string>
+    <string name="utter_secure_icon">Locked field</string>
+    <string name="utter_secure_title">Password field</string>
+    <string name="utter_secure_body">Dictation is off while you type a password.</string>
 </resources>
