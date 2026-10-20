@@ -10,10 +10,6 @@
     <string name="utter_coming_soon">Coming soon</string>
     <string name="utter_coming_soon_body">This screen lands in the next build.</string>
     <string name="home_tagline">Your voice, typed anywhere.</string>
-    <string name="home_settings">Settings</string>
-    <string name="home_server_value">URL and API key</string>
-    <string name="home_coming_soon_body">Home is coming in the next build. Server settings are ready below.</string>
-    <string name="share_setup_short">Send to another phone</string>
     <string name="server_title">Server</string>
     <string name="share_title">Share setup</string>
     <string name="screen_dictation">Dictation</string>
@@ -180,4 +176,172 @@
     <!-- Notch status (docs/spec.md §3b) -->
     <string name="utter_notify_channel">Recording status</string>
     <string name="utter_notify_failed">Dictation failed — open Utter to retry</string>
+
+    <!-- Common actions (docs/plan.md Task 13) -->
+    <string name="common_add">Add</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_save">Save</string>
+
+    <!-- Home dashboard (docs/plan.md Task 13) -->
+    <string name="home_server_section">Server</string>
+    <string name="home_server_settings">Server settings</string>
+    <string name="home_server_settings_value">URL, key, cleanup</string>
+    <string name="home_check_now">Check now</string>
+    <string name="home_checking">Checking…</string>
+    <string name="home_status_not_set_up">Not set up</string>
+    <string name="home_status_not_checked">Not checked</string>
+    <string name="home_status_connected">Connected</string>
+    <string name="home_status_unreachable">Can\'t reach server</string>
+    <string name="home_status_key_rejected">Key rejected</string>
+    <string name="home_status_live_off">Live unavailable</string>
+    <string name="home_setup_body">Add your server URL and API key to start dictating.</string>
+    <string name="home_check_body">Checks reachability, the key and the live socket.</string>
+    <string name="home_check_failed">Failed</string>
+    <string name="home_check_waiting">Waiting</string>
+    <string name="home_quick_title">Quick toggles</string>
+    <string name="home_toggle_live">Live dictation</string>
+    <string name="home_toggle_live_sub">Show words while you speak</string>
+    <string name="home_toggle_notch">Notch status</string>
+    <string name="home_toggle_notch_sub">Recording timer in the status capsule</string>
+    <string name="home_toggle_return">Return to previous keyboard</string>
+    <string name="home_toggle_return_sub">After inserting text</string>
+    <string name="home_today_title">Today</string>
+    <string name="home_stat_takes">Takes</string>
+    <string name="home_stat_words">Words</string>
+    <string name="home_stat_saved">Time saved</string>
+    <string name="home_stat_minutes">%1$d min</string>
+    <string name="home_stat_lt_min">&lt;1 min</string>
+    <plurals name="home_pending_takes">
+        <item quantity="one">%1$d take waiting to retry</item>
+        <item quantity="other">%1$d takes waiting to retry</item>
+    </plurals>
+    <string name="home_pending_body">Tap to retry or discard in History.</string>
+    <string name="home_try_title">Try it</string>
+    <string name="home_sections">All settings</string>
+
+    <!-- Dictation screen (docs/plan.md Task 13) -->
+    <string name="dictate_section_gestures">Gestures</string>
+    <string name="dictate_tap_toggle">Tap for hands-free</string>
+    <string name="dictate_tap_toggle_sub">Tap the mic to start and stop. Holding always talks.</string>
+    <string name="dictate_hold_threshold">Hold threshold</string>
+    <string name="dictate_hold_threshold_sub">How long a press lasts before it becomes push-to-talk.</string>
+    <string name="dictate_ms">%1$d ms</string>
+    <string name="dictate_slide">Slide to cancel or lock</string>
+    <string name="dictate_slide_sub">Slide left to cancel, up to lock hands-free.</string>
+    <string name="dictate_section_live">Live text</string>
+    <string name="dictate_live">Live dictation</string>
+    <string name="dictate_live_sub">Words appear while you speak. Off: one upload when you stop.</string>
+    <string name="dictate_live_in">Live text shown in</string>
+    <string name="dictate_live_panel">Panel strip</string>
+    <string name="dictate_live_field">Text field</string>
+    <string name="dictate_auto_start">Start when the panel opens</string>
+    <string name="dictate_auto_start_sub">The mic opens as soon as Utter appears.</string>
+    <string name="dictate_speculative">Clean while I pause</string>
+    <string name="dictate_speculative_sub">Cleanup starts at a pause; used only if the final text matches.</string>
+    <string name="dictate_prewarm">Pre-warm the connection</string>
+    <string name="dictate_prewarm_sub">Open the server connection when a take starts. Upload mode only.</string>
+    <string name="dictate_section_audio">Audio</string>
+    <string name="dictate_duck">Duck other audio</string>
+    <string name="dictate_duck_sub">Music and videos lower for the take.</string>
+    <string name="dictate_sounds">Start and stop sounds</string>
+    <string name="dictate_sounds_sub">A cue before the mic opens and after it closes.</string>
+    <string name="dictate_tail">Keep recording after release</string>
+    <string name="dictate_tail_sub">A long tail can catch the stop sound in the recording — Handy keeps this at 0 for that reason.</string>
+    <string name="dictate_mic">Microphone</string>
+    <string name="dictate_mic_auto">Auto</string>
+    <string name="dictate_mic_help">Auto lets Android choose. Pick a headset if the phone records silence.</string>
+    <string name="dictate_max_take">Maximum take</string>
+    <string name="dictate_max_take_value">295 s · warning at 280 s</string>
+
+    <!-- Text &amp; cleanup screen (docs/plan.md Task 13) -->
+    <string name="text_section_spacing">Spacing and case</string>
+    <string name="text_smart_spacing">Smart spacing</string>
+    <string name="text_smart_spacing_sub">Add a leading space only when the field needs one.</string>
+    <string name="text_trailing_space">Trailing space</string>
+    <string name="text_trailing_space_sub">Leave one space after the inserted text.</string>
+    <string name="text_capitalize">Capitalize sentence starts</string>
+    <string name="text_capitalize_sub">When the caret is at the start of a sentence.</string>
+    <string name="text_section_raw">Raw text</string>
+    <string name="text_fillers">Remove filler words</string>
+    <string name="text_fillers_sub">um, uh, er, ah — plus your own list.</string>
+    <string name="text_spoken_punctuation">Spoken punctuation</string>
+    <string name="text_spoken_punctuation_sub">“comma” and “new line” become symbols.</string>
+    <string name="text_custom_fillers">Your filler words</string>
+    <string name="text_custom_fillers_hint">Add a filler word</string>
+    <string name="text_custom_fillers_empty">No custom words.</string>
+    <string name="text_remove_word">Remove %1$s</string>
+    <string name="text_section_presets">Cleanup presets</string>
+    <string name="text_presets_help">Tap a preset to edit it. Arrows reorder. Built-ins can be reset.</string>
+    <string name="text_add_preset">Add preset</string>
+    <string name="text_default_preset">Default preset</string>
+    <string name="text_preset_edit_title">Edit preset</string>
+    <string name="text_preset_new_title">New preset</string>
+    <string name="text_preset_name">Name</string>
+    <string name="text_preset_prompt">Prompt</string>
+    <string name="text_preset_builtin">Built-in</string>
+    <string name="text_preset_custom">Custom</string>
+    <string name="text_preset_reset">Reset to default</string>
+    <string name="text_preset_delete">Delete preset</string>
+    <string name="text_preset_move_up">Move up</string>
+    <string name="text_preset_move_down">Move down</string>
+    <string name="text_preset_edit">Edit preset</string>
+    <string name="text_section_after">After inserting</string>
+    <string name="text_voice_edit">Voice edit</string>
+    <string name="text_voice_edit_sub">Select text, then speak an instruction to rewrite it.</string>
+    <string name="text_auto_enter">Auto-Enter after insert</string>
+    <string name="text_auto_enter_sub">Send, search or go when the field asks for it.</string>
+    <string name="text_copy">Also copy to clipboard</string>
+    <string name="text_copy_sub">The result stays one paste away.</string>
+    <string name="text_return_prev">Return to previous keyboard</string>
+    <string name="text_return_prev_sub">Switch back after a successful insert.</string>
+
+    <!-- Dictionary screen (docs/plan.md Task 13) -->
+    <string name="dict_section_vocabulary">Vocabulary</string>
+    <string name="dict_vocabulary_body">Names and terms the server should hear exactly. Sent as hints with every take.</string>
+    <string name="dict_vocabulary_hint">Add a name or term</string>
+    <string name="dict_vocabulary_empty">No words yet.</string>
+    <string name="dict_remove_word">Remove %1$s</string>
+    <string name="dict_section_replacements">Word replacements</string>
+    <string name="dict_replacements_body">Whole-word and case-insensitive, applied before cleanup.</string>
+    <string name="dict_replace_from">Find</string>
+    <string name="dict_replace_to">Replace with</string>
+    <string name="dict_replacements_empty">No replacements yet.</string>
+    <string name="dict_replace_row">%1$s → %2$s</string>
+    <string name="dict_delete_replacement">Delete replacement</string>
+
+    <!-- Appearance screen (docs/plan.md Task 13) -->
+    <string name="appear_section_theme">Theme</string>
+    <string name="appear_theme">Theme</string>
+    <string name="appear_theme_system">System</string>
+    <string name="appear_theme_light">Light</string>
+    <string name="appear_theme_dark">Dark</string>
+    <string name="appear_palette">Palette</string>
+    <string name="appear_palette_handy">Handy pink</string>
+    <string name="appear_palette_dynamic">Material You</string>
+    <string name="appear_palette_dynamic_hint">Material You needs Android 12 or newer. Older phones keep Handy pink.</string>
+    <string name="appear_section_panel">Keyboard panel</string>
+    <string name="appear_panel_height">Panel height</string>
+    <string name="appear_height_compact">Compact</string>
+    <string name="appear_height_normal">Normal</string>
+    <string name="appear_height_tall">Tall</string>
+    <string name="appear_preview">Preview</string>
+    <string name="appear_section_feedback">Feedback</string>
+    <string name="appear_haptics">Haptics</string>
+    <string name="appear_haptics_sub">Press, start, stop, cancel and lock.</string>
+
+    <!-- Notch status screen (docs/plan.md Task 13) -->
+    <string name="notch_section_status">Status</string>
+    <string name="notch_toggle">Notch status</string>
+    <string name="notch_toggle_sub">A Live Update while recording and transcribing.</string>
+    <string name="notch_permission">Notification permission</string>
+    <string name="notch_permission_allowed">Allowed</string>
+    <string name="notch_permission_missing">Not allowed</string>
+    <string name="notch_permission_body">The notch status is a notification. Without permission it stays hidden.</string>
+    <string name="notch_allow">Allow notifications</string>
+    <string name="notch_open_settings">Notification settings</string>
+    <string name="notch_section_guides">Phone guides</string>
+    <string name="notch_oneplus_title">OnePlus Live Alerts</string>
+    <string name="notch_oneplus_body">Settings → Notifications &amp; status bar → Live Alerts → allow Utter. The timer appears in the capsule.</string>
+    <string name="notch_samsung_title">Samsung Now Bar</string>
+    <string name="notch_samsung_body">Settings → Notifications → Advanced settings → Now Bar → allow Utter. The recording chip appears on the lock screen.</string>
 </resources>

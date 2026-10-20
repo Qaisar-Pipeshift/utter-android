@@ -40,9 +40,14 @@ import io.github.qaisarpipeshift.utter.Graph
 import io.github.qaisarpipeshift.utter.R
 import io.github.qaisarpipeshift.utter.data.SetupLink
 import io.github.qaisarpipeshift.utter.ui.components.SectionCard
-import io.github.qaisarpipeshift.utter.ui.components.SettingRow
 import io.github.qaisarpipeshift.utter.ui.onboarding.OnboardingScreen
+import io.github.qaisarpipeshift.utter.ui.screens.AppearanceScreen
+import io.github.qaisarpipeshift.utter.ui.screens.DictationScreen
+import io.github.qaisarpipeshift.utter.ui.screens.DictionaryScreen
+import io.github.qaisarpipeshift.utter.ui.screens.HomeScreen
+import io.github.qaisarpipeshift.utter.ui.screens.NotchScreen
 import io.github.qaisarpipeshift.utter.ui.screens.ServerScreen
+import io.github.qaisarpipeshift.utter.ui.screens.TextCleanupScreen
 import io.github.qaisarpipeshift.utter.ui.screens.ShareSetupScreen
 
 /**
@@ -114,8 +119,8 @@ fun UtterAppNav(
     NavHost(navController = navController, startDestination = startDestination) {
         composable(Routes.HOME) {
             HomeScreen(
-                onOpenServer = { navController.navigate(Routes.SERVER) },
-                onOpenShareSetup = { navController.navigate(Routes.SHARE_SETUP) },
+                graph = graph,
+                onNavigate = { route -> navController.navigate(route) { launchSingleTop = true } },
             )
         }
         composable(Routes.ONBOARDING) {
@@ -147,13 +152,13 @@ fun UtterAppNav(
             ShareSetupScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.DICTATION) {
-            PlaceholderScreen(stringResource(R.string.screen_dictation)) { navController.navigateUp() }
+            DictationScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.TEXT_CLEANUP) {
-            PlaceholderScreen(stringResource(R.string.screen_text_cleanup)) { navController.navigateUp() }
+            TextCleanupScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.DICTIONARY) {
-            PlaceholderScreen(stringResource(R.string.screen_dictionary)) { navController.navigateUp() }
+            DictionaryScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.APP_RULES) {
             PlaceholderScreen(stringResource(R.string.screen_app_rules)) { navController.navigateUp() }
@@ -165,10 +170,10 @@ fun UtterAppNav(
             PlaceholderScreen(stringResource(R.string.screen_insights)) { navController.navigateUp() }
         }
         composable(Routes.APPEARANCE) {
-            PlaceholderScreen(stringResource(R.string.screen_appearance)) { navController.navigateUp() }
+            AppearanceScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.NOTCH) {
-            PlaceholderScreen(stringResource(R.string.screen_notch)) { navController.navigateUp() }
+            NotchScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.BACKUP) {
             PlaceholderScreen(stringResource(R.string.screen_backup)) { navController.navigateUp() }
@@ -232,67 +237,6 @@ fun UtterScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content,
         )
-    }
-}
-
-/**
- * Home until Task 13 builds the dashboard: the app's only title plus entry points to the screens that already
- * exist. It is deliberately plain — the real Home has the status card, quick toggles and today's stats.
- */
-@Composable
-private fun HomeScreen(
-    onOpenServer: () -> Unit,
-    onOpenShareSetup: () -> Unit,
-) {
-    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Spacer(modifier = Modifier.size(8.dp))
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                text = stringResource(R.string.home_tagline),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            SectionCard(title = stringResource(R.string.utter_coming_soon)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Rounded.AutoAwesome,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp),
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = stringResource(R.string.home_coming_soon_body),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            SectionCard(title = stringResource(R.string.home_settings)) {
-                SettingRow(
-                    title = stringResource(R.string.server_title),
-                    value = stringResource(R.string.home_server_value),
-                    onClick = onOpenServer,
-                )
-                SettingRow(
-                    title = stringResource(R.string.share_title),
-                    value = stringResource(R.string.share_setup_short),
-                    onClick = onOpenShareSetup,
-                )
-            }
-        }
     }
 }
 
