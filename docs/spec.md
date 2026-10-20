@@ -351,7 +351,7 @@ Source: **H** = Handy (desktop, our fork) · **W** = Whisper++ · **N** = new fo
 
 | Feature | Src | Default | P |
 |---|---|---|---|
-| Secure fields (password, OTP, `IME_FLAG_NO_PERSONALIZED_LEARNING` incognito) → mic disabled, history off | W | always | P1 |
+| Password fields → mic disabled (panel shows 🔒) · incognito fields (`IME_FLAG_NO_PERSONALIZED_LEARNING`) → dictation allowed, history + stats off | W | always | P1 |
 | App rules (per package): default action raw / preset · auto-send · block dictation · history off; app list built from apps Utter was used in (no `QUERY_ALL_PACKAGES`) | W | — | P3 |
 | History of an incognito field never stored | W | always | P1 |
 
