@@ -194,6 +194,7 @@
     <string name="home_status_unreachable">Can\'t reach server</string>
     <string name="home_status_key_rejected">Key rejected</string>
     <string name="home_status_live_off">Live unavailable</string>
+    <string name="home_status_models_off">Cleanup unavailable</string>
     <string name="home_setup_body">Add your server URL and API key to start dictating.</string>
     <string name="home_check_body">Checks reachability, the key and the live socket.</string>
     <string name="home_check_failed">Failed</string>

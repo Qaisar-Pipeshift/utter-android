@@ -40,6 +40,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -82,9 +83,12 @@ import kotlinx.coroutines.withContext
 
 /** The three probes Home shows, filled in as each one returns (docs/spec.md §15.5). */
 data class HomeCheck(
+    val baseUrl: String,
     val reach: Probe? = null,
     val key: Probe? = null,
     val live: Probe? = null,
+    val models: Probe? = null,
+    val modelCount: Int = 0,
 )
 
 /** Everything the dashboard draws: the in-memory server check plus today's counters and the pending queue. */
@@ -136,6 +140,7 @@ class HomeViewModel(private val graph: Graph) : ViewModel() {
             val pending = graph.pending.list().size
             val stored = graph.settings.current()
             val key = withContext(Dispatchers.IO) { graph.secrets.load() }
+            onBaseUrlChanged(stored.baseUrl)
             _state.value = _state.value.copy(
                 takes = summary.today.takes,
                 words = summary.today.words,
@@ -169,11 +174,32 @@ class HomeViewModel(private val graph: Graph) : ViewModel() {
                 }
                 val api = Api(graph.http) { ServerConfig(current.baseUrl, key) }
                 val reach = api.warm()
-                publish(run, HomeCheck(reach = reach))
+                publish(run, HomeCheck(baseUrl = current.baseUrl, reach = reach))
                 val keyProbe = api.checkKey()
-                publish(run, HomeCheck(reach = reach, key = keyProbe))
+                publish(run, HomeCheck(baseUrl = current.baseUrl, reach = reach, key = keyProbe))
                 val live = api.probeLive()
-                publish(run, HomeCheck(reach = reach, key = keyProbe, live = live))
+                publish(run, HomeCheck(baseUrl = current.baseUrl, reach = reach, key = keyProbe, live = live))
+                val started = System.currentTimeMillis()
+                val models = try {
+                    api.models()
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (_: Exception) {
+                    Result.failure<List<String>>(IllegalStateException("models"))
+                }
+                val modelsMs = System.currentTimeMillis() - started
+                val modelList = models.getOrNull()
+                publish(
+                    run,
+                    HomeCheck(
+                        baseUrl = current.baseUrl,
+                        reach = reach,
+                        key = keyProbe,
+                        live = live,
+                        models = Probe(modelList != null, modelsMs, ""),
+                        modelCount = modelList?.size ?: 0,
+                    ),
+                )
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: Exception) {
@@ -182,6 +208,19 @@ class HomeViewModel(private val graph: Graph) : ViewModel() {
                 if (run == generation) _state.value = _state.value.copy(checking = false)
             }
         }
+    }
+
+    /**
+     * Drops a cached result that belongs to a different server (docs/spec.md §15.5).
+     *
+     * A green tick from the old URL would be a lie after the URL is edited, and the result is only process memory —
+     * forgetting it is cheaper and more honest than storing which server it tested.
+     */
+    fun onBaseUrlChanged(baseUrl: String) {
+        val cached = HomeCheckMemory.last.value ?: return
+        if (cached.baseUrl == baseUrl) return
+        HomeCheckMemory.last.value = null
+        _state.value = _state.value.copy(check = null)
     }
 
     private fun publish(run: Int, check: HomeCheck) {
@@ -214,6 +253,7 @@ fun HomeScreen(graph: Graph, onNavigate: (String) -> Unit) {
     var trial by rememberSaveable { mutableStateOf("") }
 
     OnResumeEffect { model.refresh() }
+    LaunchedEffect(settings.baseUrl) { model.onBaseUrlChanged(settings.baseUrl) }
 
     fun update(transform: (Settings) -> Settings) {
         scope.launch { graph.settings.update(transform) }
@@ -364,9 +404,11 @@ private fun ServerStatus(ui: HomeUiState, notConfigured: Boolean) {
         notConfigured -> PillTone.NEUTRAL to R.string.home_status_not_set_up
         ui.checking && check == null -> PillTone.NEUTRAL to R.string.home_checking
         check == null -> PillTone.NEUTRAL to R.string.home_status_not_checked
+        ui.checking && check?.models == null -> PillTone.NEUTRAL to R.string.home_checking
         check?.reach?.ok != true -> PillTone.ERROR to R.string.home_status_unreachable
         check?.key?.ok != true -> PillTone.ERROR to R.string.home_status_key_rejected
         check?.live?.ok != true -> PillTone.WARN to R.string.home_status_live_off
+        check?.models?.ok != true -> PillTone.WARN to R.string.home_status_models_off
         else -> PillTone.OK to R.string.home_status_connected
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -395,12 +437,17 @@ private fun ServerStatus(ui: HomeUiState, notConfigured: Boolean) {
             ProbeLine(label = stringResource(R.string.server_check_reach), probe = check?.reach)
             ProbeLine(label = stringResource(R.string.server_check_key), probe = check?.key)
             ProbeLine(label = stringResource(R.string.server_check_live), probe = check?.live)
+            ProbeLine(
+                label = stringResource(R.string.server_check_models),
+                probe = check?.models,
+                okText = check?.let { stringResource(R.string.server_models_count, it.modelCount) },
+            )
         }
     }
 }
 
 @Composable
-private fun ProbeLine(label: String, probe: Probe?) {
+private fun ProbeLine(label: String, probe: Probe?, okText: String? = null) {
     val icon = when {
         probe == null -> Icons.Rounded.RadioButtonUnchecked
         probe.ok -> Icons.Rounded.CheckCircle
@@ -413,7 +460,7 @@ private fun ProbeLine(label: String, probe: Probe?) {
     }
     val value = when {
         probe == null -> stringResource(R.string.home_check_waiting)
-        probe.ok -> stringResource(R.string.server_check_ms, probe.ms)
+        probe.ok -> okText ?: stringResource(R.string.server_check_ms, probe.ms)
         else -> stringResource(R.string.home_check_failed)
     }
     Row(
