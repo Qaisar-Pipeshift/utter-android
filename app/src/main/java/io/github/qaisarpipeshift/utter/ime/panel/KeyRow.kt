@@ -56,6 +56,8 @@ fun KeyRow(
     action: EnterAction,
     undoEnabled: Boolean,
     minimal: Boolean,
+    /** False in the Appearance preview: keys visually match the keyboard but own no pointer input. */
+    interactive: Boolean = true,
     onSwitchBack: () -> Unit,
     onPickKeyboard: () -> Unit,
     onSettings: () -> Unit,
@@ -72,27 +74,31 @@ fun KeyRow(
         Key(
             icon = Icons.Rounded.Language,
             description = stringResource(R.string.utter_switch_keyboard),
+            interactive = interactive,
             onClick = onSwitchBack,
             onLongClick = onPickKeyboard,
         )
         Key(
             icon = Icons.Rounded.Settings,
             description = stringResource(R.string.utter_open_settings),
+            interactive = interactive,
             onClick = onSettings,
         )
         if (minimal) {
             Box(Modifier.weight(1f))
         } else {
-            SpaceKey(modifier = Modifier.weight(1f), onSpace = onSpace)
+            SpaceKey(modifier = Modifier.weight(1f), interactive = interactive, onSpace = onSpace)
             Key(
                 icon = Icons.Rounded.Undo,
                 description = stringResource(R.string.utter_undo),
+                interactive = interactive,
                 onClick = onUndo,
                 enabled = undoEnabled,
             )
             Key(
                 icon = enterIcon(action),
                 description = enterDescription(action),
+                interactive = interactive,
                 onClick = onEnter,
             )
         }
@@ -109,6 +115,7 @@ fun KeyRow(
 @Composable
 fun BackspaceKey(
     enabled: Boolean,
+    interactive: Boolean = true,
     onBackspace: () -> Unit,
     onDeleteWord: () -> Unit,
     modifier: Modifier = Modifier,
@@ -126,12 +133,8 @@ fun BackspaceKey(
             delay(REPEAT_INTERVAL_MS)
         }
     }
-    Box(
-        modifier = modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-            .pointerInput(Unit) {
+    val gestures = if (interactive) {
+        Modifier.pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     down.consume()
@@ -157,7 +160,16 @@ fun BackspaceKey(
                     }
                     held = false
                 }
-            },
+        }
+        } else {
+            Modifier
+        }
+        Box(
+            modifier = modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                .then(gestures),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -170,14 +182,19 @@ fun BackspaceKey(
 }
 
 @Composable
-private fun SpaceKey(modifier: Modifier, onSpace: () -> Unit) {
+private fun SpaceKey(modifier: Modifier, interactive: Boolean, onSpace: () -> Unit) {
     val spaceNow by rememberUpdatedState(onSpace)
+    val gestures = if (interactive) {
+        Modifier.pointerInput(Unit) { detectTapGestures { spaceNow() } }
+    } else {
+        Modifier
+    }
     Box(
         modifier = modifier
             .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-            .pointerInput(Unit) { detectTapGestures { spaceNow() } },
+            .then(gestures),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -192,6 +209,7 @@ private fun SpaceKey(modifier: Modifier, onSpace: () -> Unit) {
 private fun Key(
     icon: ImageVector,
     description: String,
+    interactive: Boolean,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     enabled: Boolean = true,
@@ -199,17 +217,22 @@ private fun Key(
     val enabledNow by rememberUpdatedState(enabled)
     val tapNow by rememberUpdatedState(onClick)
     val longNow by rememberUpdatedState(onLongClick)
+    val gestures = if (interactive) {
+        Modifier.pointerInput(Unit) {
+            detectTapGestures(
+                onTap = { if (enabledNow) tapNow() },
+                onLongPress = { if (enabledNow) longNow?.invoke() },
+            )
+        }
+    } else {
+        Modifier
+    }
     Box(
         modifier = Modifier
             .size(48.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { if (enabledNow) tapNow() },
-                    onLongPress = { if (enabledNow) longNow?.invoke() },
-                )
-            },
+            .then(gestures),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

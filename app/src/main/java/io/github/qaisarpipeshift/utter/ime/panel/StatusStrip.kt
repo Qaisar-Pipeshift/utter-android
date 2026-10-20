@@ -51,6 +51,8 @@ fun StatusStrip(
     holdHint: Boolean,
     selectionAvailable: Boolean,
     speaking: Boolean,
+    /** False in the Appearance preview: chips keep their look but are not click targets. */
+    interactive: Boolean = true,
     onRetry: (String) -> Unit,
     onDiscard: (String) -> Unit,
     onUndo: () -> Unit,
@@ -62,8 +64,18 @@ fun StatusStrip(
         when (state) {
             is PanelState.Recording -> LiveText(state)
             is PanelState.Finishing -> StripText(stringResource(R.string.utter_transcribing))
-            is PanelState.Failed -> FailedStrip(state, onRetry, onDiscard)
-            is PanelState.Idle -> IdleStrip(state, holdHint, selectionAvailable, speaking, onUndo, onSwap, onReadAloud)
+            is PanelState.Failed -> FailedStrip(state, interactive, onRetry, onDiscard)
+            is PanelState.Idle -> IdleStrip(
+                state = state,
+                holdHint = holdHint,
+                selectionAvailable = selectionAvailable,
+                speaking = speaking,
+                interactive = interactive,
+                onUndo = onUndo,
+                onSwap = onSwap,
+                onReadAloud = onReadAloud,
+            )
+
             else -> Unit
         }
     }
@@ -107,6 +119,7 @@ private fun IdleStrip(
     holdHint: Boolean,
     selectionAvailable: Boolean,
     speaking: Boolean,
+    interactive: Boolean,
     onUndo: () -> Unit,
     onSwap: () -> Unit,
     onReadAloud: () -> Unit,
@@ -132,10 +145,11 @@ private fun IdleStrip(
                         if (result.cleaned || result.notCleaned) R.string.utter_raw else R.string.utter_clean_it,
                     ),
                     onClick = onSwap,
+                    enabled = interactive,
                 )
             }
             if (result.canUndo) {
-                Chip(label = stringResource(R.string.utter_undo), onClick = onUndo)
+                Chip(label = stringResource(R.string.utter_undo), onClick = onUndo, enabled = interactive)
             }
         }
         if (selectionAvailable) {
@@ -144,6 +158,7 @@ private fun IdleStrip(
                 label = stringResource(if (speaking) R.string.extras_stop else R.string.extras_read_aloud),
                 icon = if (speaking) Icons.Rounded.Stop else Icons.Rounded.VolumeUp,
                 onClick = onReadAloud,
+                enabled = interactive,
             )
         }
         if (state.pendingCount > 0) {
@@ -177,7 +192,12 @@ private fun ResultStatusChip(result: ResultChip) {
 }
 
 @Composable
-private fun FailedStrip(state: PanelState.Failed, onRetry: (String) -> Unit, onDiscard: (String) -> Unit) {
+private fun FailedStrip(
+    state: PanelState.Failed,
+    interactive: Boolean,
+    onRetry: (String) -> Unit,
+    onDiscard: (String) -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -191,8 +211,17 @@ private fun FailedStrip(state: PanelState.Failed, onRetry: (String) -> Unit, onD
             color = MaterialTheme.colorScheme.error,
         )
         if (state.takeId.isNotEmpty()) {
-            Chip(label = stringResource(R.string.utter_retry), onClick = { onRetry(state.takeId) }, emphasized = true)
-            Chip(label = stringResource(R.string.utter_discard), onClick = { onDiscard(state.takeId) })
+            Chip(
+                label = stringResource(R.string.utter_retry),
+                onClick = { onRetry(state.takeId) },
+                emphasized = true,
+                enabled = interactive,
+            )
+            Chip(
+                label = stringResource(R.string.utter_discard),
+                onClick = { onDiscard(state.takeId) },
+                enabled = interactive,
+            )
         }
     }
 }
@@ -235,6 +264,8 @@ private fun Chip(
     emphasized: Boolean = false,
     muted: Boolean = false,
     icon: ImageVector? = null,
+    /** False in the Appearance preview: the pill is drawn, the ripple and the click are not. */
+    enabled: Boolean = true,
 ) {
     val background = if (emphasized) {
         MaterialTheme.colorScheme.primary
@@ -249,7 +280,7 @@ private fun Chip(
     Box(
         modifier = Modifier
             .heightIn(min = 48.dp)
-            .clickable(enabled = onClick != null) { onClick?.invoke() },
+            .clickable(enabled = onClick != null && enabled) { onClick?.invoke() },
         contentAlignment = Alignment.Center,
     ) {
         Row(

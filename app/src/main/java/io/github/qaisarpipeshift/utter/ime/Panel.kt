@@ -77,6 +77,30 @@ interface PanelHost {
     fun onGrantMic()
 }
 
+/** Ignores every intent; the Appearance preview draws the real panel without a controller behind it. */
+object NoopPanelHost : PanelHost {
+    override fun onMicTap() = Unit
+    override fun onMicHoldStart() = Unit
+    override fun onMicHoldRelease() = Unit
+    override fun onMicCancel() = Unit
+    override fun onMicLock() = Unit
+    override fun onClean(presetId: String?) = Unit
+    override fun onBackspace() = Unit
+    override fun onDeleteWord() = Unit
+    override fun onSpace() = Unit
+    override fun onEnter() = Unit
+    override fun onUndo() = Unit
+    override fun onSwap() = Unit
+    override fun onReadAloud() = Unit
+    override fun onRetry(takeId: String) = Unit
+    override fun onDiscard(takeId: String) = Unit
+    override fun onSwitchBack() = Unit
+    override fun onPickKeyboard() = Unit
+    override fun onSettings() = Unit
+    override fun onSetup() = Unit
+    override fun onGrantMic() = Unit
+}
+
 /** Panel heights from docs/plan.md Task 9, before the navigation-bar inset. */
 private fun panelHeight(mode: PanelHeight): Dp = when (mode) {
     PanelHeight.COMPACT -> 196.dp
@@ -88,12 +112,15 @@ private fun panelHeight(mode: PanelHeight): Dp = when (mode) {
 private const val WAVE_BARS = 32
 
 /**
- * The keyboard panel (docs/spec.md §4, §9, §16; docs/plan.md Task 9).
+ * The keyboard panel in the IME (docs/spec.md §4, §9, §16; docs/plan.md Task 9).
  *
  * Why one stateless composable: it renders the [PanelState] the controller publishes and forwards gestures to
  * [PanelHost] — no business state lives here, so a recomposition can never disagree with the controller. The panel
  * is flat on the Handy tokens: one accent, 16 dp radii, muted secondary keys, and nothing moves while idle; the
  * waveform ring is composed only while recording.
+ *
+ * This is the IME's entry point: always interactive and always responsible for the navigation-bar inset. The
+ * settings preview draws the same pixels through [KeyboardPanel] with both turned off.
  */
 @Composable
 fun Panel(
@@ -104,6 +131,40 @@ fun Panel(
     enterAction: EnterAction,
     holdHint: Boolean,
     host: PanelHost,
+) {
+    KeyboardPanel(
+        state = state,
+        settings = settings,
+        selectionAvailable = selectionAvailable,
+        speaking = speaking,
+        enterAction = enterAction,
+        holdHint = holdHint,
+        interactive = true,
+        applyInsets = true,
+        host = host,
+    )
+}
+
+/**
+ * The visual panel shared by the IME and the Appearance preview (docs/spec.md §16).
+ *
+ * Why the two flags: the preview lives inside a scrolling settings page, so it must not eat drag gestures meant for
+ * the page ([interactive] = false removes every pointer handler and every click target) and must not reserve the
+ * navigation-bar inset ([applyInsets] = false) — the page's own insets already cover it. Everything else — paddings,
+ * heights, the backspace/sparkle row, the waveform ring, the theme tokens — is exactly what the keyboard shows.
+ */
+@Composable
+fun KeyboardPanel(
+    state: PanelState,
+    settings: Settings,
+    selectionAvailable: Boolean,
+    speaking: Boolean,
+    enterAction: EnterAction,
+    holdHint: Boolean,
+    interactive: Boolean,
+    applyInsets: Boolean,
+    host: PanelHost,
+    modifier: Modifier = Modifier,
 ) {
     var showPresets by remember { mutableStateOf(false) }
     val amplitudes = remember { mutableStateListOf<Float>() }
@@ -126,8 +187,12 @@ fun Panel(
         state is PanelState.Finishing ||
         state is PanelState.Failed
 
-    Surface(color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxWidth().navigationBarsPadding()) {
+    Surface(color = MaterialTheme.colorScheme.background, modifier = modifier) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .then(if (applyInsets) Modifier.navigationBarsPadding() else Modifier),
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -144,6 +209,7 @@ fun Panel(
                         body = stringResource(R.string.utter_setup_body),
                         action = stringResource(R.string.utter_setup_button),
                         onAction = host::onSetup,
+                        interactive = interactive,
                         modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
                     )
 
@@ -154,6 +220,7 @@ fun Panel(
                         body = stringResource(R.string.utter_mic_needed_body),
                         action = stringResource(R.string.utter_grant_mic),
                         onAction = host::onGrantMic,
+                        interactive = interactive,
                         modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
                     )
 
@@ -164,6 +231,7 @@ fun Panel(
                         body = stringResource(R.string.utter_secure_body),
                         action = null,
                         onAction = null,
+                        interactive = interactive,
                         modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
                     )
 
@@ -174,6 +242,7 @@ fun Panel(
                         body = stringResource(R.string.utter_blocked_body),
                         action = null,
                         onAction = null,
+                        interactive = interactive,
                         modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
                     )
 
@@ -183,6 +252,7 @@ fun Panel(
                             holdHint = holdHint,
                             selectionAvailable = selectionAvailable,
                             speaking = speaking,
+                            interactive = interactive,
                             onRetry = host::onRetry,
                             onDiscard = host::onDiscard,
                             onUndo = host::onUndo,
@@ -195,6 +265,7 @@ fun Panel(
                             settings = settings,
                             amplitudes = amplitudes,
                             selectionAvailable = selectionAvailable,
+                            interactive = interactive,
                             host = host,
                             onShowPresets = { showPresets = true },
                         )
@@ -204,6 +275,7 @@ fun Panel(
                     action = enterAction,
                     undoEnabled = (state as? PanelState.Idle)?.result?.canUndo == true,
                     minimal = !dictation,
+                    interactive = interactive,
                     onSwitchBack = host::onSwitchBack,
                     onPickKeyboard = host::onPickKeyboard,
                     onSettings = host::onSettings,
@@ -212,7 +284,7 @@ fun Panel(
                     onEnter = host::onEnter,
                 )
             }
-            if (showPresets && state is PanelState.Idle) {
+            if (interactive && showPresets && state is PanelState.Idle) {
                 PresetSheet(
                     presets = settings.presets,
                     selectedId = settings.defaultPresetId,
@@ -233,6 +305,7 @@ private fun ControlRow(
     settings: Settings,
     amplitudes: List<Float>,
     selectionAvailable: Boolean,
+    interactive: Boolean,
     host: PanelHost,
     onShowPresets: () -> Unit,
 ) {
@@ -244,6 +317,7 @@ private fun ControlRow(
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             BackspaceKey(
                 enabled = state !is PanelState.Finishing,
+                interactive = interactive,
                 onBackspace = host::onBackspace,
                 onDeleteWord = host::onDeleteWord,
             )
@@ -253,6 +327,7 @@ private fun ControlRow(
             haptics = settings.haptics,
             holdThresholdMs = settings.holdThresholdMs,
             slideGestures = settings.slideGestures,
+            interactive = interactive,
             amplitudes = amplitudes,
             elapsedMs = (state as? PanelState.Recording)?.elapsedMs,
             onTap = host::onMicTap,
@@ -266,6 +341,7 @@ private fun ControlRow(
                 enabled = editable,
                 editMode = selectionAvailable && settings.voiceEdit,
                 presetsAllowed = state is PanelState.Idle,
+                interactive = interactive,
                 onClean = { host.onClean(null) },
                 onShowPresets = onShowPresets,
             )
@@ -279,6 +355,7 @@ private fun CleanButton(
     enabled: Boolean,
     editMode: Boolean,
     presetsAllowed: Boolean,
+    interactive: Boolean,
     onClean: () -> Unit,
     onShowPresets: () -> Unit,
 ) {
@@ -286,6 +363,16 @@ private fun CleanButton(
     val presetsAllowedNow by rememberUpdatedState(presetsAllowed)
     val cleanNow by rememberUpdatedState(onClean)
     val presetsNow by rememberUpdatedState(onShowPresets)
+    val gestures = if (interactive) {
+        Modifier.pointerInput(Unit) {
+            detectTapGestures(
+                onTap = { if (enabledNow) cleanNow() },
+                onLongPress = { if (enabledNow && presetsAllowedNow) presetsNow() },
+            )
+        }
+    } else {
+        Modifier
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
@@ -294,12 +381,7 @@ private fun CleanButton(
                 .background(
                     MaterialTheme.colorScheme.secondary.copy(alpha = if (enabledNow) 0.30f else 0.12f),
                 )
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { if (enabledNow) cleanNow() },
-                        onLongPress = { if (enabledNow && presetsAllowedNow) presetsNow() },
-                    )
-                },
+                .then(gestures),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -330,6 +412,7 @@ private fun SimpleBody(
     body: String,
     action: String?,
     onAction: (() -> Unit)?,
+    interactive: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -372,7 +455,7 @@ private fun SimpleBody(
                     .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.primary)
-                    .clickable(onClick = onAction)
+                    .clickable(enabled = interactive, onClick = onAction)
                     .padding(horizontal = 18.dp),
                 contentAlignment = Alignment.Center,
             ) {

@@ -62,6 +62,8 @@ fun MicButton(
     haptics: Boolean,
     holdThresholdMs: Int,
     slideGestures: Boolean,
+    /** False in the Appearance preview: no pointer handler may eat a drag meant for the settings page. */
+    interactive: Boolean = true,
     amplitudes: List<Float>,
     elapsedMs: Long?,
     onTap: () -> Unit,
@@ -96,13 +98,9 @@ fun MicButton(
         if (recording != null) {
             Waveform(amplitudes = amplitudes, modifier = Modifier.fillMaxSize())
         }
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(if (enabledNow) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f))
-                .pointerInput(Unit) {
-                    awaitEachGesture {
+        val gestures = if (interactive) {
+            Modifier.pointerInput(Unit) {
+                awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         down.consume()
                         if (!enabledNow) return@awaitEachGesture
@@ -169,7 +167,16 @@ fun MicButton(
                             }
                         }
                     }
-                },
+            }
+        } else {
+            Modifier
+        }
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(if (enabledNow) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f))
+                .then(gestures),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
