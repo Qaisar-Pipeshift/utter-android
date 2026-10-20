@@ -1,6 +1,7 @@
 package io.github.qaisarpipeshift.utter.net
 
 import io.github.qaisarpipeshift.utter.core.Prompts
+import io.github.qaisarpipeshift.utter.core.Transcriber
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -33,7 +34,10 @@ data class ServerConfig(val baseUrl: String, val apiKey: String)
 class Api(
     internal val http: Http,
     internal val config: () -> ServerConfig?,
-) {
+) : Transcriber {
+
+    /** The controller's live-session port; a missing server or key becomes a handle that fails on first read. */
+    override fun live(prompt: String?): LiveHandle = openLive(prompt)
 
     /** `GET /warm`, no auth. Fire-and-forget from the controller; the result only feeds Diagnostics. */
     suspend fun warm(): Probe = withContext(Dispatchers.IO) {
@@ -130,7 +134,7 @@ class Api(
      * the audio part second, exactly as the server reader expects; `keyterms_prompt` is added only when the user has
      * vocabulary, so the default request is byte-identical to the documented one.
      */
-    suspend fun upload(pcm: File, keyterms: List<String>): SttResult = withContext(Dispatchers.IO) {
+    override suspend fun upload(pcm: File, keyterms: List<String>): SttResult = withContext(Dispatchers.IO) {
         val cfg = config() ?: return@withContext SttResult.Network(KIND_CONFIG)
         val base = baseUrl() ?: return@withContext SttResult.Network(KIND_CONFIG)
         val started = now()

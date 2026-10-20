@@ -1,0 +1,617 @@
+package io.github.qaisarpipeshift.utter.core
+
+import io.github.qaisarpipeshift.utter.audio.RecorderStart
+import io.github.qaisarpipeshift.utter.audio.TakeRecorder
+import io.github.qaisarpipeshift.utter.data.HistoryStore
+import io.github.qaisarpipeshift.utter.data.PendingStore
+import io.github.qaisarpipeshift.utter.data.Settings
+import io.github.qaisarpipeshift.utter.data.StatsStore
+import io.github.qaisarpipeshift.utter.diag.Diag
+import io.github.qaisarpipeshift.utter.net.CleanResult
+import io.github.qaisarpipeshift.utter.net.LiveEvent
+import io.github.qaisarpipeshift.utter.net.LiveHandle
+import io.github.qaisarpipeshift.utter.net.SttResult
+import java.io.File
+import java.time.LocalDate
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class DictationControllerTest {
+
+    @get:Rule
+    val folder = TemporaryFolder()
+
+    private lateinit var pending: PendingStore
+    private lateinit var history: HistoryStore
+    private lateinit var stats: StatsStore
+    private val recorder = FakeRecorder()
+    private val transcriber = FakeTranscriber()
+    private val cleaner = FakeCleaner()
+    private val inserter = FakeInserter()
+    private val haptics = mutableListOf<Haptic>()
+    private val diag = Diag()
+
+    private var settings: Settings = Settings()
+    private var online = true
+    private var now = 1_000_000L
+
+    @Before
+    fun setUp() {
+        val cache = folder.newFolder("cache")
+        val files = folder.newFolder("files")
+        pending = PendingStore(cache, files, io = Dispatchers.Unconfined)
+        history = HistoryStore(folder.newFolder("history"), io = Dispatchers.Unconfined)
+        stats = StatsStore(folder.newFolder("stats"), io = Dispatchers.Unconfined, clock = { DAY })
+    }
+
+    private fun TestScope.controller(): DictationController = DictationController(
+        scope = this,
+        settings = { settings },
+        recorder = recorder,
+        transcriber = transcriber,
+        cleaner = cleaner,
+        inserter = inserter,
+        pending = pending,
+        history = history,
+        stats = stats,
+        clock = Clock { now },
+        isOnline = { online },
+        haptic = { haptics += it },
+        diag = diag,
+    )
+
+    private fun request(
+        action: TakeAction = TakeAction.RAW,
+        presetId: String? = null,
+        kind: FieldKind = FieldKind.TEXT,
+        selection: String? = null,
+    ): TakeRequest = TakeRequest(
+        action = action,
+        presetId = presetId,
+        field = FieldInfo(kind, incognito = false, pkg = "com.example.app", fieldId = 7, actionLabel = EnterAction.NEWLINE),
+        selection = selection,
+    )
+
+    // ---- happy paths ----
+
+    @Test
+    fun `live preview then final inserts once and clears pending`() = runTest {
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+        assertTrue(controller.state.value is PanelState.Recording)
+
+        val live = transcriber.handle!!
+        recorder.chunk()
+        runCurrent()
+        assertEquals(1, live.sends)
+
+        live.emit(LiveEvent.Preview("hel", "lo"))
+        runCurrent()
+        assertEquals("lo", (controller.state.value as PanelState.Recording).tentative)
+
+        live.emit(LiveEvent.Final("hello world"))
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals(listOf("hello world"), inserter.inserts.map { it.first })
+        assertTrue(pending.list().isEmpty())
+        val idle = controller.state.value as PanelState.Idle
+        assertEquals("hello world", idle.result?.text)
+        assertFalse(idle.result!!.cleaned)
+    }
+
+    @Test
+    fun `successful take records history and stats`() = runTest {
+        transcriber.liveEnabled = false
+        val controller = controller()
+
+        controller.start(request())
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        val entries = history.list()
+        assertEquals(1, entries.size)
+        assertEquals("hello world", entries.single().raw)
+        assertEquals("hello world", entries.single().finalText)
+        assertEquals(1, stats.summary().total.takes)
+    }
+
+    @Test
+    fun `live failure falls back to uploading the same file`() = runTest {
+        transcriber.uploadResult = SttResult.Text("from upload", 40)
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+
+        transcriber.handle!!.emit(LiveEvent.Failed("boom"))
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals(1, transcriber.uploads)
+        assertEquals("from upload", inserter.inserts.single().first)
+        val idle = controller.state.value as PanelState.Idle
+        assertEquals("from upload", idle.result?.text)
+    }
+
+    @Test
+    fun `live final timeout falls back to upload after twenty seconds`() = runTest {
+        transcriber.uploadResult = SttResult.Text("late upload", 10)
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+
+        controller.stop()
+        runCurrent()
+        advanceTimeBy(20_001)
+        advanceUntilIdle()
+
+        assertEquals(1, transcriber.uploads)
+        assertEquals(1, transcriber.handle!!.cancels)
+        assertEquals("late upload", inserter.inserts.single().first)
+    }
+
+    @Test
+    fun `clean action inserts the cleaned text`() = runTest {
+        transcriber.liveEnabled = false
+        cleaner.result = CleanResult.Text("Hello, world.")
+        val controller = controller()
+
+        controller.start(request(TakeAction.CLEAN))
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals("Hello, world.", inserter.inserts.single().first)
+        assertTrue((controller.state.value as PanelState.Idle).result!!.cleaned)
+    }
+
+    // ---- failure paths ----
+
+    @Test
+    fun `upload STT down fails the take and keeps it pending`() = runTest {
+        transcriber.liveEnabled = false
+        transcriber.uploadResult = SttResult.SttDown
+        val controller = controller()
+
+        controller.start(request())
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        val failed = controller.state.value as PanelState.Failed
+        assertEquals(FailReason.STT_DOWN, failed.reason)
+        assertEquals(1, pending.list().size)
+        assertEquals("stt_down", pending.meta(failed.takeId)?.lastError)
+        assertTrue(inserter.inserts.isEmpty())
+    }
+
+    @Test
+    fun `unauthorized keeps the take for retry`() = runTest {
+        transcriber.liveEnabled = false
+        transcriber.uploadResult = SttResult.Unauthorized
+        val controller = controller()
+
+        controller.start(request())
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals(FailReason.KEY_REJECTED, (controller.state.value as PanelState.Failed).reason)
+        assertEquals(1, pending.list().size)
+    }
+
+    @Test
+    fun `retry uploads the kept take and deletes it on success`() = runTest {
+        transcriber.liveEnabled = false
+        transcriber.uploadResult = SttResult.Network("timeout")
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+        val failed = controller.state.value as PanelState.Failed
+
+        transcriber.uploadResult = SttResult.Text("retried text", 15)
+        controller.retry(failed.takeId)
+        advanceUntilIdle()
+
+        assertEquals("retried text", inserter.inserts.single().first)
+        assertTrue(pending.list().isEmpty())
+    }
+
+    @Test
+    fun `discard drops a kept take and returns to idle`() = runTest {
+        transcriber.liveEnabled = false
+        transcriber.uploadResult = SttResult.Http(500)
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+        val failed = controller.state.value as PanelState.Failed
+        assertEquals(FailReason.SERVER_ERROR, failed.reason)
+
+        controller.discard(failed.takeId)
+        advanceUntilIdle()
+
+        assertTrue(pending.list().isEmpty())
+        assertTrue(controller.state.value is PanelState.Idle)
+    }
+
+    @Test
+    fun `no speech drops the take without inserting`() = runTest {
+        transcriber.liveEnabled = false
+        transcriber.uploadResult = SttResult.NoSpeech
+        val controller = controller()
+
+        controller.start(request())
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        assertTrue(inserter.inserts.isEmpty())
+        assertTrue(pending.list().isEmpty())
+        val idle = controller.state.value as PanelState.Idle
+        assertEquals("No speech", idle.result?.text)
+    }
+
+    @Test
+    fun `offline start still records and fails offline at stop`() = runTest {
+        transcriber.liveEnabled = false
+        online = false
+        val controller = controller()
+
+        controller.start(request())
+        runCurrent()
+        assertTrue(controller.state.value is PanelState.Recording)
+
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals(FailReason.OFFLINE, (controller.state.value as PanelState.Failed).reason)
+        assertEquals(0, transcriber.uploads)
+        assertEquals(1, pending.list().size)
+    }
+
+    @Test
+    fun `recorder error mid-take finishes and uploads what was captured`() = runTest {
+        transcriber.liveEnabled = false
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+
+        recorder.fail(-3)
+        advanceUntilIdle()
+
+        assertEquals(1, recorder.stopCalls)
+        assertEquals(1, transcriber.uploads)
+        assertEquals(1, inserter.inserts.size)
+    }
+
+    // ---- edges ----
+
+    @Test
+    fun `cancel deletes the pending take and releases the mic`() = runTest {
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+
+        controller.cancel()
+        advanceUntilIdle()
+
+        assertEquals(1, recorder.cancelCalls)
+        assertTrue(pending.list().isEmpty())
+        assertTrue(controller.state.value is PanelState.Idle)
+        assertTrue(inserter.inserts.isEmpty())
+    }
+
+    @Test
+    fun `auto stop at 295 seconds finishes the take`() = runTest {
+        transcriber.liveEnabled = false
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+
+        advanceTimeBy(295_001)
+        advanceUntilIdle()
+
+        assertEquals(1, recorder.stopCalls)
+        assertEquals(1, transcriber.uploads)
+        assertEquals(1, inserter.inserts.size)
+        assertTrue(haptics.contains(Haptic.WARNING))
+    }
+
+    @Test
+    fun `a take shorter than 300 ms is discarded silently`() = runTest {
+        transcriber.liveEnabled = false
+        recorder.durationMs = 200
+        val controller = controller()
+
+        controller.start(request())
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        assertTrue(inserter.inserts.isEmpty())
+        assertTrue(pending.list().isEmpty())
+        assertNull((controller.state.value as PanelState.Idle).result)
+    }
+
+    @Test
+    fun `clean failure inserts the raw text and flags it as not cleaned`() = runTest {
+        transcriber.liveEnabled = false
+        cleaner.result = CleanResult.Failed("down")
+        val controller = controller()
+
+        controller.start(request(TakeAction.CLEAN))
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        val idle = controller.state.value as PanelState.Idle
+        assertEquals("hello world", idle.result?.text)
+        assertTrue(idle.result!!.notCleaned)
+        assertEquals("hello world", inserter.inserts.single().first)
+    }
+
+    @Test
+    fun `edit selection sends Prompts edit message and replaces the selection`() = runTest {
+        transcriber.liveEnabled = false
+        transcriber.uploadResult = SttResult.Text("fix the cat", 20)
+        cleaner.result = CleanResult.Text("the cat")
+        val controller = controller()
+
+        controller.start(request(TakeAction.EDIT_SELECTION, selection = "teh cat"))
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals(Prompts.editMessage("fix the cat", "teh cat"), cleaner.messages.single())
+        val (text, meta) = inserter.inserts.single()
+        assertEquals("the cat", text)
+        assertTrue(meta.replaceSelection)
+    }
+
+    @Test
+    fun `speculative clean is reused when the final text matches`() = runTest {
+        settings = settings.copy(speculativeClean = true)
+        cleaner.result = CleanResult.Text("Hello there.")
+        val controller = controller()
+        controller.start(request(TakeAction.CLEAN))
+        runCurrent()
+
+        transcriber.handle!!.emit(LiveEvent.Preview("hello there", ""))
+        runCurrent()
+        advanceTimeBy(901)
+        runCurrent()
+        assertEquals(1, cleaner.messages.size)
+
+        transcriber.handle!!.emit(LiveEvent.Final("hello there"))
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals(1, cleaner.messages.size)
+        assertEquals("Hello there.", inserter.inserts.single().first)
+    }
+
+    @Test
+    fun `speculative clean is discarded when the final text differs`() = runTest {
+        settings = settings.copy(speculativeClean = true)
+        cleaner.result = CleanResult.Text("Hello there.")
+        val controller = controller()
+        controller.start(request(TakeAction.CLEAN))
+        runCurrent()
+
+        transcriber.handle!!.emit(LiveEvent.Preview("hello there", ""))
+        runCurrent()
+        advanceTimeBy(901)
+        runCurrent()
+        assertEquals(1, cleaner.messages.size)
+
+        transcriber.handle!!.emit(LiveEvent.Final("hello there friend"))
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals(2, cleaner.messages.size)
+        assertEquals("Hello there.", inserter.inserts.single().first)
+    }
+
+    @Test
+    fun `panel hidden mid-take finishes the take`() = runTest {
+        transcriber.liveEnabled = false
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+
+        controller.onPanelHidden()
+        advanceUntilIdle()
+
+        assertEquals(1, recorder.stopCalls)
+        assertEquals(1, transcriber.uploads)
+        assertEquals(1, inserter.inserts.size)
+    }
+
+    @Test
+    fun `chunks reach the live socket and update the amplitude`() = runTest {
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+
+        recorder.chunk(amplitude = 0.8f)
+        runCurrent()
+
+        assertEquals(1, transcriber.handle!!.sends)
+        assertEquals(0.8f, (controller.state.value as PanelState.Recording).amplitude, 0.001f)
+
+        controller.cancel()
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `a password field never opens the mic`() = runTest {
+        val controller = controller()
+
+        controller.start(request(kind = FieldKind.PASSWORD))
+        runCurrent()
+
+        assertTrue(controller.state.value is PanelState.SecureField)
+        assertFalse(recorder.started)
+    }
+
+    @Test
+    fun `starting while finishing is ignored`() = runTest {
+        // The live socket never answers, so the take parks in Finishing until the 20 s fallback fires.
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+        controller.stop()
+        runCurrent()
+        assertTrue(controller.state.value is PanelState.Finishing)
+
+        controller.start(request())
+        advanceUntilIdle()
+
+        assertEquals(1, recorder.stopCalls)
+        assertEquals(1, transcriber.uploads)
+    }
+
+    private companion object {
+        val DAY: LocalDate = LocalDate.of(2026, 10, 20)
+    }
+}
+
+private class FakeRecorder : TakeRecorder {
+    var startResult: RecorderStart = RecorderStart.Ok
+    var durationMs = 1_500L
+    var stopCalls = 0
+    var cancelCalls = 0
+    var started = false
+
+    private var chunkSink: ((ByteArray, Float) -> Unit)? = null
+    private var errorSink: ((Int) -> Unit)? = null
+
+    override suspend fun start(
+        out: File,
+        onChunk: (ByteArray, Float) -> Unit,
+        onError: (Int) -> Unit,
+    ): RecorderStart {
+        started = true
+        chunkSink = onChunk
+        errorSink = onError
+        out.writeBytes(ByteArray(320))
+        return startResult
+    }
+
+    fun chunk(amplitude: Float = 0.5f) {
+        chunkSink?.invoke(ByteArray(320), amplitude)
+    }
+
+    fun fail(code: Int = -3) {
+        errorSink?.invoke(code)
+    }
+
+    override suspend fun stop(): Long {
+        stopCalls++
+        return durationMs
+    }
+
+    override fun cancel() {
+        cancelCalls++
+    }
+}
+
+private class FakeLive : LiveHandle {
+    private val channel = Channel<LiveEvent>(Channel.UNLIMITED)
+
+    var sends = 0
+    var commits = 0
+    var cancels = 0
+
+    override val events: Flow<LiveEvent> = channel.receiveAsFlow()
+
+    override fun send(pcm16le: ByteArray): Boolean {
+        sends++
+        return true
+    }
+
+    override fun commit() {
+        commits++
+    }
+
+    override fun cancel() {
+        cancels++
+    }
+
+    fun emit(event: LiveEvent) {
+        channel.trySend(event)
+    }
+}
+
+private class FakeTranscriber : Transcriber {
+    var liveEnabled = true
+    var handle: FakeLive? = null
+    var uploads = 0
+    var uploadResult: SttResult = SttResult.Text("hello world", 120)
+    var prompt: String? = null
+
+    override fun live(prompt: String?): LiveHandle? {
+        this.prompt = prompt
+        if (!liveEnabled) return null
+        return FakeLive().also { handle = it }
+    }
+
+    override suspend fun upload(pcm: File, keyterms: List<String>): SttResult {
+        uploads++
+        return uploadResult
+    }
+}
+
+private class FakeCleaner : Cleaner {
+    val messages = mutableListOf<String>()
+    var result: CleanResult = CleanResult.Text("cleaned")
+
+    override suspend fun clean(message: String): CleanResult {
+        messages += message
+        return result
+    }
+}
+
+private class FakeInserter : Inserter {
+    val inserts = mutableListOf<Pair<String, InsertMeta>>()
+    var result = true
+    var previews = 0
+    var cleared = 0
+
+    override fun insert(text: String, meta: InsertMeta): Boolean {
+        inserts += text to meta
+        return result
+    }
+
+    override fun preview(text: String) {
+        previews++
+    }
+
+    override fun clearPreview() {
+        cleared++
+    }
+}

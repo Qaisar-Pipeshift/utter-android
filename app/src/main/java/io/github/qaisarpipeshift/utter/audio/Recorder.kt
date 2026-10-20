@@ -38,8 +38,16 @@ sealed interface RecorderStart {
  * released; [cancel] discards the file. Implementations must never hold the microphone after any of them returns.
  */
 interface TakeRecorder {
-    /** Opens the mic, writes PCM16LE 16 kHz mono to [out], calls [onChunk] every 100 ms. */
-    suspend fun start(out: File, onChunk: (ByteArray, Float) -> Unit): RecorderStart
+    /**
+     * Opens the mic, writes PCM16LE 16 kHz mono to [out], calls [onChunk] every 100 ms. [onError] is called once
+     * with the negative `AudioRecord.read` code when the mic dies mid-take, so the caller can finish the take with
+     * the audio captured so far instead of losing it.
+     */
+    suspend fun start(
+        out: File,
+        onChunk: (ByteArray, Float) -> Unit,
+        onError: (Int) -> Unit = {},
+    ): RecorderStart
 
     /** Stops, releases the mic, and returns the captured duration in milliseconds. */
     suspend fun stop(): Long
@@ -73,7 +81,11 @@ class AndroidRecorder(
     private var job: Job? = null
     private var bytesWritten = 0L
 
-    override suspend fun start(out: File, onChunk: (ByteArray, Float) -> Unit): RecorderStart =
+    override suspend fun start(
+        out: File,
+        onChunk: (ByteArray, Float) -> Unit,
+        onError: (Int) -> Unit,
+    ): RecorderStart =
         withContext(Dispatchers.IO) {
             synchronized(lock) {
                 if (record != null) return@withContext RecorderStart.Error(BUSY, "already recording")
@@ -153,7 +165,7 @@ class AndroidRecorder(
                 bytesWritten = 0
             }
             running = true
-            launchReadLoop(recorder, buffered, onChunk)
+            launchReadLoop(recorder, buffered, onChunk, onError)
             RecorderStart.Ok
         }
 
@@ -187,6 +199,7 @@ class AndroidRecorder(
         recorder: AudioRecord,
         buffered: BufferedOutputStream,
         onChunk: (ByteArray, Float) -> Unit,
+        onError: (Int) -> Unit,
     ) {
         job = scope.launch {
             val samples = ShortArray(CHUNK_SAMPLES)
@@ -195,7 +208,9 @@ class AndroidRecorder(
                 while (isActive && running) {
                     val read = recorder.read(samples, 0, samples.size)
                     if (read < 0) {
+                        // The mic died mid-take; tell the caller so it can finish and upload what was captured.
                         diag.event("recorder_read", read.toString())
+                        onError(read)
                         break
                     }
                     if (read == 0) continue

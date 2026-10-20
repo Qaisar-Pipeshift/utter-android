@@ -47,6 +47,9 @@ class PendingStore(
         }
     }
 
+    /** Where the recorder wrote, or would write, the PCM of [id]; the controller needs it to retry a kept take. */
+    fun pcmFile(id: String): File = File(takesDir, "$id$PCM_SUFFIX")
+
     /** Pending takes, newest first. */
     suspend fun list(): List<PendingMeta> = withContext(io) {
         mutex.withLock { readAll().sortedByDescending { it.createdAt } }
