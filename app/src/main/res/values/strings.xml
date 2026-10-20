@@ -403,10 +403,10 @@
     <string name="rules_action_preset">Preset</string>
     <string name="rules_preset">Preset</string>
     <string name="rules_auto_send">Auto-send after insert</string>
-    <string name="rules_auto_send_sub">Press the field's Send action when dictation finishes.</string>
+    <string name="rules_auto_send_sub">Press the field\'s Send action when dictation finishes.</string>
     <string name="rules_block">Block dictation</string>
     <string name="rules_block_sub">The panel shows a locked field in this app.</string>
-    <string name="rules_history_off">Don't keep history</string>
+    <string name="rules_history_off">Don\'t keep history</string>
     <string name="rules_history_off_sub">Takes in this app are not saved to history.</string>
 
     <!-- Backup (docs/plan.md Task 14) -->
@@ -414,10 +414,10 @@
     <string name="backup_export_body">Save your settings as a JSON file. The API key is never included.</string>
     <string name="backup_export_button">Export settings</string>
     <string name="backup_section_import">Import</string>
-    <string name="backup_import_body">Restore settings from a backup. This phone's API key stays as it is.</string>
+    <string name="backup_import_body">Restore settings from a backup. This phone\'s API key stays as it is.</string>
     <string name="backup_import_button">Choose a backup</string>
     <string name="backup_exported">Settings exported.</string>
-    <string name="backup_export_failed">Couldn't export the settings.</string>
+    <string name="backup_export_failed">Couldn\'t export the settings.</string>
     <string name="backup_imported">Settings imported.</string>
     <string name="backup_import_failed">That file is not an Utter backup.</string>
     <string name="backup_confirm_title">Import these settings?</string>
