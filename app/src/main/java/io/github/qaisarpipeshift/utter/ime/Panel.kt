@@ -370,7 +370,8 @@ private fun ControlRow(
                 }
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                Box(Modifier.size(BUTTON_SLOT), contentAlignment = Alignment.Center) {
+                // Width only: a 72 dp-tall box would centre the caption 36 dp below "Dictate".
+                Box(Modifier.width(BUTTON_SLOT), contentAlignment = Alignment.Center) {
                     ButtonLabel(
                         stringResource(if (editMode) R.string.utter_edit_label else R.string.utter_label_clean),
                     )
