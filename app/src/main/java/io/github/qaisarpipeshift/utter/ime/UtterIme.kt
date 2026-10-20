@@ -46,6 +46,7 @@ import io.github.qaisarpipeshift.utter.core.TakeAction
 import io.github.qaisarpipeshift.utter.core.TakeRequest
 import io.github.qaisarpipeshift.utter.data.Settings
 import io.github.qaisarpipeshift.utter.data.ThemeMode
+import io.github.qaisarpipeshift.utter.notify.LiveStatus
 import io.github.qaisarpipeshift.utter.ui.theme.UtterTheme
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -89,6 +90,7 @@ class UtterIme :
     private lateinit var graph: Graph
     private lateinit var inputOps: InputOps
     private lateinit var controller: DictationController
+    private lateinit var liveStatus: LiveStatus
 
     /** Never let a bug in the keyboard crash the keyboard: record the failure kind and carry on. */
     private val imeScope = CoroutineScope(
@@ -142,10 +144,13 @@ class UtterIme :
             diag = graph.diag,
         )
 
+        liveStatus = LiveStatus(this, { graph.settings.current() }, imeScope)
+
         imeScope.launch {
             controller.state.collect { state ->
                 lastControllerState = state
                 refreshUi()
+                liveStatus.onState(state)
             }
         }
         imeScope.launch { graph.pending.purge() }
@@ -252,6 +257,7 @@ class UtterIme :
     }
 
     override fun onDestroy() {
+        if (::liveStatus.isInitialized) liveStatus.cancel()
         imeScope.cancel()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         viewModelStore.clear()

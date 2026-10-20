@@ -66,4 +66,8 @@
     <string name="utter_secure_icon">Locked field</string>
     <string name="utter_secure_title">Password field</string>
     <string name="utter_secure_body">Dictation is off while you type a password.</string>
+
+    <!-- Notch status (docs/spec.md §3b) -->
+    <string name="utter_notify_channel">Recording status</string>
+    <string name="utter_notify_failed">Dictation failed — open Utter to retry</string>
 </resources>
