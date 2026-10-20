@@ -93,7 +93,7 @@ dependencies {
 
 // CI is the only place tests run, so a failure must print its full message and stack trace in the log.
 tasks.withType<Test>().configureEach {
-    // Robolectric's SDK 36 sandbox reflects into java.io.FileDescriptor; JDK 21 modules must open it to the tests.
+    // Robolectric on JDK 21 reflects into java.io; open it to the tests (screenshots render on SDK 35).
     jvmArgs("--add-opens=java.base/java.io=ALL-UNNAMED")
     // Record mode without the Roborazzi Gradle plugin: every captureRoboImage call writes its PNG.
     systemProperty("roborazzi.test.record", "true")

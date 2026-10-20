@@ -27,7 +27,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36], qualifiers = "w411dp-h914dp-xxhdpi")
+@Config(sdk = [35], qualifiers = "w411dp-h914dp-xxhdpi")
 class ScreenScreenshotTest {
 
     @get:Rule
