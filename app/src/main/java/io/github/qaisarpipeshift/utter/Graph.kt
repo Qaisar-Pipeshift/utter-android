@@ -1,6 +1,8 @@
 package io.github.qaisarpipeshift.utter
 
 import android.content.Context
+import io.github.qaisarpipeshift.utter.data.SecretStore
+import io.github.qaisarpipeshift.utter.data.SettingsRepo
 import io.github.qaisarpipeshift.utter.diag.Diag
 
 /**
@@ -14,4 +16,8 @@ class Graph(app: Context) {
     val appContext: Context = app.applicationContext
 
     val diag: Diag = Diag()
+
+    val settings: SettingsRepo by lazy { SettingsRepo(appContext) }
+
+    val secrets: SecretStore by lazy { SecretStore(appContext, diag) }
 }
