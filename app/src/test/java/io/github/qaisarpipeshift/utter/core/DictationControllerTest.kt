@@ -2,6 +2,7 @@ package io.github.qaisarpipeshift.utter.core
 
 import io.github.qaisarpipeshift.utter.audio.RecorderStart
 import io.github.qaisarpipeshift.utter.audio.TakeRecorder
+import io.github.qaisarpipeshift.utter.data.AppRule
 import io.github.qaisarpipeshift.utter.data.HistoryStore
 import io.github.qaisarpipeshift.utter.data.PendingMeta
 import io.github.qaisarpipeshift.utter.data.PendingStore
@@ -625,6 +626,60 @@ class DictationControllerTest {
 
         assertTrue(history.list().isEmpty())
         assertEquals(1, stats.summary().total.takes)
+    }
+
+    @Test
+    fun `a blocked app never opens the mic`() = runTest {
+        settings = settings.copy(appRules = listOf(AppRule("com.example.app", block = true)))
+        val controller = controller()
+
+        controller.start(request())
+        runCurrent()
+
+        assertTrue(controller.state.value is PanelState.Blocked)
+        assertEquals(0, recorder.startCalls)
+        assertTrue(pending.list().isEmpty())
+        assertTrue(haptics.isEmpty())
+    }
+
+    @Test
+    fun `a blocked app does not retry a kept take`() = runTest {
+        val pcm = pending.newTake(
+            PendingMeta(
+                id = "old",
+                createdAt = now,
+                action = TakeAction.RAW.name,
+                presetId = null,
+                pkg = "com.example.app",
+                fieldKind = FieldKind.TEXT.name,
+            ),
+        )
+        pcm.writeBytes(ByteArray(320))
+        settings = settings.copy(appRules = listOf(AppRule("com.example.app", block = true)))
+        val controller = controller()
+
+        controller.retry("old")
+        advanceUntilIdle()
+
+        assertTrue(controller.state.value is PanelState.Blocked)
+        assertEquals(0, transcriber.uploads)
+        assertEquals(1, pending.list().size)
+    }
+
+    @Test
+    fun `an app rule with history off keeps the take out of history`() = runTest {
+        transcriber.liveEnabled = false
+        settings = settings.copy(appRules = listOf(AppRule("com.example.app", historyOff = true)))
+        val controller = controller()
+
+        controller.start(request())
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals(listOf("hello world"), inserter.inserts.map { it.first })
+        assertTrue(history.list().isEmpty())
+        assertTrue(pending.list().isEmpty())
     }
 
     @Test

@@ -183,8 +183,8 @@ class TakeRetrier(
     }
 
     private suspend fun record(meta: PendingMeta, settings: Settings, done: RetryOutcome.Success, raw: String) {
-        val rule = settings.appRules.firstOrNull { it.pkg == meta.pkg }
-        val allowed = !meta.incognito && rule?.historyOff != true
+        val rule = AppRules.ruleFor(settings.appRules, meta.pkg)
+        val allowed = AppRules.historyAllowed(rule, meta.incognito)
         if (settings.historyOn && allowed) {
             quietStore {
                 history.add(

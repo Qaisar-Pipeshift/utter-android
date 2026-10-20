@@ -110,6 +110,11 @@ class DictationController(
     private val isOnline: () -> Boolean = { true },
     private val haptic: (Haptic) -> Unit = {},
     private val diag: Diag = Diag(),
+    /**
+     * History label for a take that has no app of its own, such as the Quick Settings recorder. Null keeps the
+     * normal `seenApps` label of [FieldInfo.pkg]; the field's package still keys the app rule.
+     */
+    private val historyLabel: String? = null,
 ) {
     private val _state = MutableStateFlow<PanelState>(PanelState.Idle(result = null, pendingCount = 0, offline = false))
     val state: StateFlow<PanelState> = _state.asStateFlow()
@@ -221,6 +226,11 @@ class DictationController(
         val field = request.field
         if (field.kind == FieldKind.PASSWORD) {
             _state.value = PanelState.SecureField
+            return
+        }
+        // The IME already hides the mic in a blocked app; this guard keeps a stale panel state from recording anyway.
+        if (AppRules.blocks(AppRules.ruleFor(snapshot.appRules, field.pkg))) {
+            _state.value = PanelState.Blocked
             return
         }
 
@@ -338,13 +348,17 @@ class DictationController(
             _state.value = idleState(null)
             return
         }
+        val snapshot = settings()
+        if (AppRules.blocks(AppRules.ruleFor(snapshot.appRules, meta.pkg))) {
+            _state.value = PanelState.Blocked
+            return
+        }
         val file = pending.pcmFile(takeId)
         if (!file.exists()) {
             quietStore { pending.delete(takeId) }
             _state.value = idleState(null)
             return
         }
-        val snapshot = settings()
         val action = actionOf(meta.action)
         val kind = fieldKindOf(meta.fieldKind)
         // The field may be a different one after an app switch; the inserter targets the current connection anyway.
@@ -540,8 +554,8 @@ class DictationController(
         val inserted = guarded(false) { inserter.insert(done.text, meta) }
         diag.event(if (inserted) "insert" else "insert_clipboard")
 
-        val rule = snapshot.appRules.firstOrNull { it.pkg == started.field.pkg }
-        val statsAllowed = !started.field.incognito && rule?.historyOff != true
+        val rule = AppRules.ruleFor(snapshot.appRules, started.field.pkg)
+        val statsAllowed = AppRules.historyAllowed(rule, started.field.incognito)
         val words = TextOps.wordCount(done.text)
         if (snapshot.historyOn && statsAllowed) {
             quietStore {
@@ -550,7 +564,7 @@ class DictationController(
                         id = UUID.randomUUID().toString(),
                         ts = clock.now(),
                         pkg = started.field.pkg,
-                        appLabel = snapshot.seenApps[started.field.pkg] ?: started.field.pkg,
+                        appLabel = historyLabel ?: snapshot.seenApps[started.field.pkg] ?: started.field.pkg,
                         raw = speech.text,
                         finalText = done.text,
                         action = started.request.action.name,

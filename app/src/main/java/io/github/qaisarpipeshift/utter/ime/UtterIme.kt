@@ -33,6 +33,7 @@ import io.github.qaisarpipeshift.utter.Graph
 import io.github.qaisarpipeshift.utter.ui.MainActivity
 import io.github.qaisarpipeshift.utter.UtterApp
 import io.github.qaisarpipeshift.utter.audio.AndroidRecorder
+import io.github.qaisarpipeshift.utter.core.AppRules
 import io.github.qaisarpipeshift.utter.core.DictationController
 import io.github.qaisarpipeshift.utter.core.EnterAction
 import io.github.qaisarpipeshift.utter.core.FieldInfo
@@ -218,7 +219,7 @@ class UtterIme :
         if (!restarting && info != null && graph.settings.current().autoStart && canDictate() &&
             lastControllerState is PanelState.Idle
         ) {
-            startTake(TakeAction.RAW)
+            startMicTake()
         }
     }
 
@@ -264,7 +265,7 @@ class UtterIme :
             is PanelState.Recording -> controller.stop()
             is PanelState.Finishing -> Unit
             else -> if (graph.settings.current().tapHandsFree) {
-                startTake(TakeAction.RAW)
+                startMicTake()
             } else {
                 // Hold-only mode: a tap explains the gesture instead of starting a take.
                 showHoldHint()
@@ -275,7 +276,7 @@ class UtterIme :
     override fun onMicHoldStart() {
         if (!canDictate()) return
         if (lastControllerState is PanelState.Recording || lastControllerState is PanelState.Finishing) return
-        startTake(TakeAction.RAW, holding = true)
+        startMicTake(holding = true)
     }
 
     override fun onMicHoldRelease() {
@@ -355,12 +356,27 @@ class UtterIme :
 
     // ---- state ----
 
+    /**
+     * The main mic button's take for the current app (docs/spec.md §15.3): a rule may turn it into the app's preset,
+     * while the sparkle button keeps its own explicit preset choice.
+     */
+    private fun startMicTake(holding: Boolean = false) {
+        val rule = AppRules.ruleFor(graph.settings.current().appRules, fieldState.value?.pkg.orEmpty())
+        val take = AppRules.micTake(rule)
+        startTake(take.action, take.presetId, holding)
+    }
+
     private fun startTake(action: TakeAction, presetId: String? = null, holding: Boolean = false) {
         val field = fieldState.value ?: return
         if (field.kind == FieldKind.PASSWORD) return
+        if (blockedHere()) return
         val selection = if (action == TakeAction.EDIT_SELECTION) inputOps.selection() else null
         controller.start(TakeRequest(action, presetId, field, selection), holding)
     }
+
+    /** The current package's rule blocks dictation; the panel shows the calm blocked state instead of the mic. */
+    private fun blockedHere(): Boolean =
+        AppRules.blocks(AppRules.ruleFor(graph.settings.current().appRules, fieldState.value?.pkg.orEmpty()))
 
     /**
      * The single visible state: IME-level conditions (secure field, setup, mic permission) outrank the controller's
@@ -370,6 +386,7 @@ class UtterIme :
         uiState.value = when {
             secureField -> PanelState.SecureField
             !setupResolved -> PanelState.Idle(result = null, pendingCount = 0, offline = false)
+            blockedHere() -> PanelState.Blocked
             setupNeeded() -> PanelState.SetupNeeded
             !micGranted() -> PanelState.MicPermissionNeeded
             else -> lastControllerState
@@ -378,7 +395,8 @@ class UtterIme :
 
     private fun setupNeeded(): Boolean = !keyPresent || graph.settings.current().baseUrl.isBlank()
 
-    private fun canDictate(): Boolean = setupResolved && !setupNeeded() && micGranted() && !secureField
+    private fun canDictate(): Boolean =
+        setupResolved && !setupNeeded() && micGranted() && !secureField && !blockedHere()
 
     private fun micGranted(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED

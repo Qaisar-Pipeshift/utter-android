@@ -7,6 +7,7 @@ import android.inputmethodservice.InputMethodService
 import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import io.github.qaisarpipeshift.utter.core.AppRules
 import io.github.qaisarpipeshift.utter.core.EnterAction
 import io.github.qaisarpipeshift.utter.core.FieldInfos
 import io.github.qaisarpipeshift.utter.core.FieldKind
@@ -49,9 +50,9 @@ class InputOps(
             return false
         }
         val snapshot = settings()
-        if (meta.replaceSelection) return replaceSelection(connection, text, meta, snapshot)
-
         val field = fieldOf(editor)
+        if (meta.replaceSelection) return replaceSelection(connection, text, meta, snapshot, field.pkg)
+
         val before = connection.getTextBeforeCursor(BEFORE_LIMIT, 0)
         var out = text
         if (spacesAllowed(field.kind)) {
@@ -68,7 +69,7 @@ class InputOps(
         }
         last = Last(out, field.pkg, field.fieldId)
         if (snapshot.copyToClipboard) copy(text)
-        if (snapshot.autoEnter) enter(meta.field.actionLabel)
+        if (autoSend(snapshot, field.pkg)) enter(meta.field.actionLabel)
         onInserted()
         return true
     }
@@ -82,6 +83,7 @@ class InputOps(
         text: String,
         meta: InsertMeta,
         snapshot: Settings,
+        pkg: String,
     ): Boolean {
         val selected = connection.getSelectedText(0)?.toString()
         if (meta.selection == null || selected != meta.selection) {
@@ -97,10 +99,14 @@ class InputOps(
         // A replaced selection has no "previous text" to restore; undo stays unavailable for this insert.
         last = null
         if (snapshot.copyToClipboard) copy(text)
-        if (snapshot.autoEnter) enter(meta.field.actionLabel)
+        if (autoSend(snapshot, pkg)) enter(meta.field.actionLabel)
         onInserted()
         return true
     }
+
+    /** The global auto-enter setting or the current app's rule (docs/spec.md §15.3) presses the field's action. */
+    private fun autoSend(snapshot: Settings, pkg: String): Boolean =
+        snapshot.autoEnter || AppRules.autoSend(AppRules.ruleFor(snapshot.appRules, pkg))
 
     override fun preview(text: String) {
         ime.currentInputConnection?.setComposingText(text, 1)

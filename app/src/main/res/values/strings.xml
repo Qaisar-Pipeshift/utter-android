@@ -170,6 +170,9 @@
     <string name="utter_secure_icon">Locked field</string>
     <string name="utter_secure_title">Password field</string>
     <string name="utter_secure_body">Dictation is off while you type a password.</string>
+    <string name="utter_blocked_icon">Dictation off</string>
+    <string name="utter_blocked_title">Dictation is off in this app</string>
+    <string name="utter_blocked_body">An app rule turns dictation off here. Change it in Settings, App rules.</string>
 
     <!-- Notch status (docs/spec.md §3b) -->
     <string name="utter_notify_channel">Recording status</string>

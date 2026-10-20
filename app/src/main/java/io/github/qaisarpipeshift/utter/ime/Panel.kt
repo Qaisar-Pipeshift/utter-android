@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MicOff
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -157,6 +158,16 @@ fun Panel(
                         iconDescription = stringResource(R.string.utter_secure_icon),
                         title = stringResource(R.string.utter_secure_title),
                         body = stringResource(R.string.utter_secure_body),
+                        action = null,
+                        onAction = null,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+
+                    PanelState.Blocked -> SimpleBody(
+                        icon = Icons.Rounded.MicOff,
+                        iconDescription = stringResource(R.string.utter_blocked_icon),
+                        title = stringResource(R.string.utter_blocked_title),
+                        body = stringResource(R.string.utter_blocked_body),
                         action = null,
                         onAction = null,
                         modifier = Modifier.weight(1f).fillMaxWidth(),

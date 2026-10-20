@@ -4,13 +4,17 @@ package io.github.qaisarpipeshift.utter.core
  * Everything the panel can show (docs/spec.md §4, docs/plan.md §2).
  *
  * Why a sealed hierarchy of immutable values: the controller emits one state per transition and Compose renders it
- * directly, so there is no second source of truth to keep in sync. [SetupNeeded], [MicPermissionNeeded] and
- * [SecureField] are decided by the IME; the controller only emits [Idle], [Recording], [Finishing] and [Failed].
+ * directly, so there is no second source of truth to keep in sync. [SetupNeeded], [MicPermissionNeeded],
+ * [SecureField] and [Blocked] are decided by the IME or a package rule; the controller emits [Idle], [Recording],
+ * [Finishing], [Failed] and, as a guard, [Blocked].
  */
 sealed interface PanelState {
     data object SetupNeeded : PanelState
     data object MicPermissionNeeded : PanelState
     data object SecureField : PanelState
+
+    /** The current app's rule turns dictation off (docs/spec.md §15.3): a calm notice, only the system keys work. */
+    data object Blocked : PanelState
 
     /** Nothing in flight; [result] is the last outcome chip, [pendingCount] the retry queue, [offline] the last check. */
     data class Idle(val result: ResultChip?, val pendingCount: Int, val offline: Boolean) : PanelState
