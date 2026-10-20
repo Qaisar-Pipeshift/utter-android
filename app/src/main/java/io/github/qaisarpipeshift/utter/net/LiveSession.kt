@@ -42,8 +42,8 @@ interface LiveHandle {
  * [finalTimeoutMs] is exposed only so tests can use a short wait; production always passes the default.
  */
 fun Api.openLive(prompt: String?, finalTimeoutMs: Long = DEFAULT_FINAL_TIMEOUT_MS): LiveHandle {
-    val cfg = config() ?: return FailedLiveHandle(KIND_CONFIG)
-    val base = normalizeBaseUrl(cfg.baseUrl, http.allowCleartext) ?: return FailedLiveHandle(KIND_CONFIG)
+    val cfg = config() ?: return FailedLiveHandle(OPEN_KIND_CONFIG)
+    val base = normalizeBaseUrl(cfg.baseUrl, http.allowCleartext) ?: return FailedLiveHandle(OPEN_KIND_CONFIG)
     return LiveSession(
         client = http.webSocketClient,
         url = "$base/v1/realtime?intent=transcription",
@@ -261,6 +261,9 @@ internal class LiveSession(
 }
 
 private const val DEFAULT_FINAL_TIMEOUT_MS = 20_000L
+
+/** Failure kind for a session that cannot open because the server URL or key is missing or invalid. */
+private const val OPEN_KIND_CONFIG = "config"
 
 /** A session that could not even be opened (no server URL or key); it fails at once instead of throwing. */
 private class FailedLiveHandle(private val why: String) : LiveHandle {
