@@ -3,6 +3,31 @@
     <string name="app_name">Utter</string>
     <string name="ime_subtype_label">Utter voice</string>
 
+    <!-- App shell: common actions and placeholders (docs/plan.md Task 11) -->
+    <string name="utter_back">Back</string>
+    <string name="utter_next">Next</string>
+    <string name="utter_finish">Finish</string>
+    <string name="utter_coming_soon">Coming soon</string>
+    <string name="utter_coming_soon_body">This screen lands in the next build.</string>
+    <string name="home_tagline">Your voice, typed anywhere.</string>
+    <string name="home_settings">Settings</string>
+    <string name="home_server_value">URL and API key</string>
+    <string name="share_setup_short">Send to another phone</string>
+    <string name="onboarding_title">Set up Utter</string>
+    <string name="server_title">Server</string>
+    <string name="share_title">Share setup</string>
+    <string name="screen_dictation">Dictation</string>
+    <string name="screen_text_cleanup">Text &amp; cleanup</string>
+    <string name="screen_dictionary">Dictionary</string>
+    <string name="screen_app_rules">App rules</string>
+    <string name="screen_history">History</string>
+    <string name="screen_insights">Insights</string>
+    <string name="screen_appearance">Appearance</string>
+    <string name="screen_notch">Notch status</string>
+    <string name="screen_backup">Backup</string>
+    <string name="screen_diagnostics">Diagnostics</string>
+    <string name="screen_about">About</string>
+
     <!-- Panel: live and result states -->
     <string name="utter_panel_hint">Tap the mic, or hold it to talk</string>
     <string name="utter_listening">Listening…</string>

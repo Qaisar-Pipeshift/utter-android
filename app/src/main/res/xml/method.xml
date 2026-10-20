@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- docs/spec.md §3: switching-aware + a non-auxiliary subtype, or Gboard's globe key skips Utter. -->
 <input-method xmlns:android="http://schemas.android.com/apk/res/android"
-    android:settingsActivity="io.github.qaisarpipeshift.utter.MainActivity"
+    android:settingsActivity="io.github.qaisarpipeshift.utter.ui.MainActivity"
     android:supportsSwitchingToNextInputMethod="true">
     <subtype
         android:imeSubtypeLocale="en_US"

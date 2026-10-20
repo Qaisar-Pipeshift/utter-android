@@ -30,7 +30,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.github.qaisarpipeshift.utter.Graph
-import io.github.qaisarpipeshift.utter.MainActivity
+import io.github.qaisarpipeshift.utter.ui.MainActivity
 import io.github.qaisarpipeshift.utter.UtterApp
 import io.github.qaisarpipeshift.utter.audio.AndroidRecorder
 import io.github.qaisarpipeshift.utter.core.Cleaner
@@ -190,7 +190,7 @@ class UtterIme :
                     ThemeMode.LIGHT -> false
                     ThemeMode.DARK -> true
                 }
-                UtterTheme(dark = dark) {
+                UtterTheme(dark = dark, palette = settings.palette) {
                     Panel(
                         state = state,
                         settings = settings,
