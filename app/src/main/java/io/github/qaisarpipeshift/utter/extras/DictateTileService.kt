@@ -1,5 +1,6 @@
 package io.github.qaisarpipeshift.utter.extras
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.drawable.Icon
@@ -31,6 +32,9 @@ class DictateTileService : TileService() {
      * Android 14 requires the `PendingIntent` overload; older releases only have the `Intent` one, which is
      * deprecated but still the only API they know.
      */
+    @Suppress("DEPRECATION")
+    // The Intent overload is only reached below API 34, where it is the supported call.
+    @SuppressLint("StartActivityAndCollapseDeprecated")
     @Suppress("DEPRECATION")
     override fun onClick() {
         super.onClick()

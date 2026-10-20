@@ -41,6 +41,8 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ShareSetupScreen(graph: Graph, onBack: () -> Unit) {
     val context = LocalContext.current
+    val appName = stringResource(R.string.app_name)
+    val chooserTitle = stringResource(R.string.share_chooser)
     var link by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var copied by remember { mutableStateOf(false) }
@@ -91,7 +93,7 @@ fun ShareSetupScreen(graph: Graph, onBack: () -> Unit) {
                         onClick = {
                             val clipboard = context.getSystemService(ClipboardManager::class.java)
                             clipboard?.setPrimaryClip(
-                                ClipData.newPlainText(context.getString(R.string.app_name), setupLink),
+                                ClipData.newPlainText(appName, setupLink),
                             )
                             copied = true
                             Toast.makeText(context, R.string.share_copied, Toast.LENGTH_SHORT).show()
@@ -105,9 +107,9 @@ fun ShareSetupScreen(graph: Graph, onBack: () -> Unit) {
                             val send = Intent(Intent.ACTION_SEND)
                                 .setType("text/plain")
                                 .putExtra(Intent.EXTRA_TEXT, setupLink)
-                                .putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.share_chooser))
+                                .putExtra(Intent.EXTRA_SUBJECT, chooserTitle)
                             context.startActivity(
-                                Intent.createChooser(send, context.getString(R.string.share_chooser)),
+                                Intent.createChooser(send, chooserTitle),
                             )
                         },
                         modifier = Modifier.weight(1f),

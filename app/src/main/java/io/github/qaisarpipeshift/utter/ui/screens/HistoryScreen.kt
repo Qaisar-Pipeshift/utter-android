@@ -300,6 +300,9 @@ fun HistoryScreen(graph: Graph, onBack: () -> Unit) {
     val settings by graph.settings.flow.collectAsState(initial = graph.settings.current())
     val context = LocalContext.current
     var confirmClear by remember { mutableStateOf(false) }
+    // Resolved in composition so a configuration change (locale, font) re-reads them.
+    val failMessages = FailReason.entries.associateWith { stringResource(failReasonRes(it)) }
+    val noSpeechMessage = stringResource(R.string.utter_no_speech)
 
     LaunchedEffect(ui.copiedText) {
         val text = ui.copiedText ?: return@LaunchedEffect
@@ -310,8 +313,8 @@ fun HistoryScreen(graph: Graph, onBack: () -> Unit) {
     LaunchedEffect(ui.notice) {
         val notice = ui.notice ?: return@LaunchedEffect
         val message = when (notice) {
-            is HistoryNotice.Failed -> context.getString(failReasonRes(notice.reason))
-            HistoryNotice.NoSpeech -> context.getString(R.string.utter_no_speech)
+            is HistoryNotice.Failed -> failMessages.getValue(notice.reason)
+            HistoryNotice.NoSpeech -> noSpeechMessage
         }
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         model.consumeNotice()
