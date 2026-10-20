@@ -10,6 +10,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Callback
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
@@ -57,7 +58,9 @@ class Http(
 suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
     enqueue(object : Callback {
         override fun onResponse(call: Call, response: Response) {
-            continuation.resume(response)
+            // If the caller was cancelled meanwhile, nobody will close the response: close it here so the pooled
+            // connection is released instead of leaking.
+            continuation.resume(response) { _, value, _ -> value.close() }
         }
 
         override fun onFailure(call: Call, failure: IOException) {
@@ -87,7 +90,10 @@ fun normalizeBaseUrl(raw: String, allowCleartext: Boolean = false): String? {
         rest = rest.dropLast(3).trimEnd('/')
         if (rest.isEmpty()) return null
     }
-    return "$scheme://$rest"
+    val url = "$scheme://$rest"
+    // OkHttp throws IllegalArgumentException (not IOException) for a host it cannot parse; reject it here so a typo in
+    // Settings shows "check the URL" instead of crashing the keyboard.
+    return if (url.toHttpUrlOrNull() != null) url else null
 }
 
 /** Coarse failure kind for [SttResult.Network]; keeps raw exception text (which may carry a URL) out of diagnostics. */

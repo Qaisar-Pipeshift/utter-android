@@ -88,7 +88,9 @@ internal class LiveSession(
     private var committed = false
     private var queuedAudio = 0
 
-    private val socket: WebSocket
+    // Volatile and nullable: OkHttp may call the listener on its own thread before the constructor has stored this.
+    @Volatile
+    private var socket: WebSocket? = null
 
     override val events: Flow<LiveEvent> = flow {
         var running = true
@@ -128,8 +130,8 @@ internal class LiveSession(
             outbox.clear()
             queuedAudio = 0
         }
-        socket.send(LiveProtocol.CLEAR)
-        socket.close(CLOSE_NORMAL, "cancelled")
+        socket?.send(LiveProtocol.CLEAR)
+        socket?.close(CLOSE_NORMAL, "cancelled")
         signal.trySend(Unit)
         scope.cancel()
     }
@@ -146,7 +148,7 @@ internal class LiveSession(
                 outbox.addLast(frame)
                 return !finished
             }
-            return socket.send(frame)
+            return socket?.send(frame) ?: false
         }
     }
 
@@ -184,7 +186,7 @@ internal class LiveSession(
             outbox.clear()
             queuedAudio = 0
         }
-        socket.close(CLOSE_NORMAL, null)
+        socket?.close(CLOSE_NORMAL, null)
         signal.trySend(Unit)
         scope.cancel()
     }
@@ -203,7 +205,9 @@ internal class LiveSession(
             if (type == SESSION_UPDATED) {
                 synchronized(lock) {
                     ready = true
-                    while (outbox.isNotEmpty()) socket.send(outbox.removeFirst())
+                    // The callback's own WebSocket, not the `socket` field: this listener is handed to OkHttp from the
+                    // constructor, so the field may not be visible yet on OkHttp's thread.
+                    while (outbox.isNotEmpty()) webSocket.send(outbox.removeFirst())
                     queuedAudio = 0
                 }
                 return

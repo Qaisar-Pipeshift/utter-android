@@ -6,6 +6,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -253,6 +254,7 @@ class Api(
                 val buffer = ByteArray(CHUNK_BYTES)
                 var read = source.read(buffer)
                 while (read >= 0) {
+                    ensureActive()
                     if (read > 0) sink(buffer.copyOf(read), rate)
                     read = source.read(buffer)
                 }
