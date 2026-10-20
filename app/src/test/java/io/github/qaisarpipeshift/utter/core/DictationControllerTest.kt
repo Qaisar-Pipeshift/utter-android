@@ -3,6 +3,7 @@ package io.github.qaisarpipeshift.utter.core
 import io.github.qaisarpipeshift.utter.audio.RecorderStart
 import io.github.qaisarpipeshift.utter.audio.TakeRecorder
 import io.github.qaisarpipeshift.utter.data.HistoryStore
+import io.github.qaisarpipeshift.utter.data.PendingMeta
 import io.github.qaisarpipeshift.utter.data.PendingStore
 import io.github.qaisarpipeshift.utter.data.Settings
 import io.github.qaisarpipeshift.utter.data.StatsStore
