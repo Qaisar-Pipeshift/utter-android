@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,6 +24,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -32,8 +38,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import io.github.qaisarpipeshift.utter.Graph
 import io.github.qaisarpipeshift.utter.R
+import io.github.qaisarpipeshift.utter.data.SetupLink
 import io.github.qaisarpipeshift.utter.ui.components.SectionCard
 import io.github.qaisarpipeshift.utter.ui.components.SettingRow
+import io.github.qaisarpipeshift.utter.ui.onboarding.OnboardingScreen
+import io.github.qaisarpipeshift.utter.ui.screens.ServerScreen
+import io.github.qaisarpipeshift.utter.ui.screens.ShareSetupScreen
 
 /**
  * Every destination of the settings app (docs/spec.md §16).
@@ -66,8 +76,41 @@ object Routes {
  * gets the platform's back swipe animation. The only back affordance this file adds is the top-bar arrow.
  */
 @Composable
-fun UtterAppNav(graph: Graph, startDestination: String = Routes.HOME) {
+fun UtterAppNav(
+    graph: Graph,
+    startDestination: String = Routes.HOME,
+    initialStep: Int = 0,
+    micStepRequest: Int = 0,
+    imported: SetupLink.Data? = null,
+    onImportedConsumed: () -> Unit = {},
+) {
     val navController = rememberNavController()
+
+    // The destination lambdas must read stable state objects, not parameters: NavHost remembers its builder, so a
+    // captured value would stay frozen at the first composition.
+    var onboardingImport by remember { mutableStateOf<SetupLink.Data?>(null) }
+    var onboardingStepRequest by remember { mutableStateOf(0) }
+    var handledMicRequests by remember { mutableStateOf(0) }
+
+    // A confirmed utter://setup link always lands in the wizard, pre-filled; the link itself never becomes a route.
+    LaunchedEffect(imported) {
+        val data = imported ?: return@LaunchedEffect
+        onboardingImport = data
+        // An import starts from the server step even if an old "Grant mic" counter is still set.
+        onboardingStepRequest = 0
+        navController.navigate(Routes.ONBOARDING) { launchSingleTop = true }
+    }
+
+    // The IME's "Grant mic" also works when the settings app is already open (singleTop + onNewIntent). Only a new
+    // request counts: consuming an import must not replay an old one.
+    LaunchedEffect(micStepRequest) {
+        if (micStepRequest > handledMicRequests) {
+            handledMicRequests = micStepRequest
+            onboardingStepRequest = micStepRequest
+            navController.navigate(Routes.ONBOARDING) { launchSingleTop = true }
+        }
+    }
+
     NavHost(navController = navController, startDestination = startDestination) {
         composable(Routes.HOME) {
             HomeScreen(
@@ -75,13 +118,33 @@ fun UtterAppNav(graph: Graph, startDestination: String = Routes.HOME) {
                 onOpenShareSetup = { navController.navigate(Routes.SHARE_SETUP) },
             )
         }
-        // Task 12 replaces this placeholder with the wizard.
         composable(Routes.ONBOARDING) {
-            PlaceholderScreen(stringResource(R.string.onboarding_title)) { navController.navigateUp() }
+            OnboardingScreen(
+                graph = graph,
+                initialStep = initialStep,
+                stepRequest = onboardingStepRequest,
+                imported = onboardingImport,
+                onImportedConsumed = {
+                    onboardingImport = null
+                    onImportedConsumed()
+                },
+                onDone = {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.ONBOARDING) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+            )
         }
-        // Task 12 replaces this placeholder with the real Server screen.
         composable(Routes.SERVER) {
-            PlaceholderScreen(stringResource(R.string.server_title)) { navController.navigateUp() }
+            ServerScreen(
+                graph = graph,
+                onBack = { navController.navigateUp() },
+                onShareSetup = { navController.navigate(Routes.SHARE_SETUP) },
+            )
+        }
+        composable(Routes.SHARE_SETUP) {
+            ShareSetupScreen(graph = graph, onBack = { navController.navigateUp() })
         }
         composable(Routes.DICTATION) {
             PlaceholderScreen(stringResource(R.string.screen_dictation)) { navController.navigateUp() }
@@ -115,10 +178,6 @@ fun UtterAppNav(graph: Graph, startDestination: String = Routes.HOME) {
         }
         composable(Routes.ABOUT) {
             PlaceholderScreen(stringResource(R.string.screen_about)) { navController.navigateUp() }
-        }
-        // Task 12 replaces this placeholder with the Share setup screen.
-        composable(Routes.SHARE_SETUP) {
-            PlaceholderScreen(stringResource(R.string.share_title)) { navController.navigateUp() }
         }
     }
 }
@@ -167,6 +226,7 @@ fun UtterScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),

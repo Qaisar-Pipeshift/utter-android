@@ -99,8 +99,12 @@ class Api(
             authRequest(cfg, "$base/v1/realtime?intent=transcription").build(),
             listener,
         )
-        val ok = withTimeoutOrNull(PROBE_LIVE_TIMEOUT_MS) { updated.await() } ?: false
-        socket.close(CLOSE_NORMAL, null)
+        // Closed on every path, including cancellation from the Server screen's Check being restarted.
+        val ok = try {
+            withTimeoutOrNull(PROBE_LIVE_TIMEOUT_MS) { updated.await() } ?: false
+        } finally {
+            socket.close(CLOSE_NORMAL, null)
+        }
         val ms = now() - started
         if (ok) Probe(true, ms, "Live accepted") else Probe(false, ms, "Live failed")
     }

@@ -23,10 +23,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun SwitchRow(
     title: String,
+    subtitle: String,
     checked: Boolean,
     onChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    subtitle: String = "",
 ) {
     Row(
         modifier = modifier

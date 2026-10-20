@@ -14,7 +14,6 @@
     <string name="home_server_value">URL and API key</string>
     <string name="home_coming_soon_body">Home is coming in the next build. Server settings are ready below.</string>
     <string name="share_setup_short">Send to another phone</string>
-    <string name="onboarding_title">Set up Utter</string>
     <string name="server_title">Server</string>
     <string name="share_title">Share setup</string>
     <string name="screen_dictation">Dictation</string>
@@ -28,6 +27,91 @@
     <string name="screen_backup">Backup</string>
     <string name="screen_diagnostics">Diagnostics</string>
     <string name="screen_about">About</string>
+
+    <!-- Onboarding wizard (docs/plan.md Task 12) -->
+    <string name="onboarding_step">Step %1$d of %2$d</string>
+    <string name="onboarding_server_title">Connect your server</string>
+    <string name="onboarding_server_body">Utter sends audio to your own speech server. Paste the URL and key you were given.</string>
+    <string name="onboarding_key_help">Enter the API key from your server.</string>
+    <string name="onboarding_mic_title">Microphone</string>
+    <string name="onboarding_mic_body">Utter needs the microphone to hear you. Audio goes only to your server.</string>
+    <string name="onboarding_allow_mic">Allow microphone</string>
+    <string name="onboarding_mic_denied_help">Microphone access is off. If Android won\'t ask again, enable it in App info.</string>
+    <string name="onboarding_open_app_info">Open app info</string>
+    <string name="onboarding_notifications_title">Notifications</string>
+    <string name="onboarding_notifications_body">A quiet notification shows a recording timer and powers the Notch status while you dictate.</string>
+    <string name="onboarding_allow_notifications">Allow notifications</string>
+    <string name="onboarding_notifications_not_needed">Not needed on this phone</string>
+    <string name="onboarding_notifications_skip">You can skip this — only the recording timer needs it.</string>
+    <string name="onboarding_enable_title">Turn on Utter</string>
+    <string name="onboarding_enable_body">Enable Utter in the keyboard settings, then come back. Utter appears in the keyboard list.</string>
+    <string name="onboarding_open_keyboard_settings">Open keyboard settings</string>
+    <string name="onboarding_enable_waiting">Waiting for Utter to be enabled…</string>
+    <string name="onboarding_enabled">Utter is enabled</string>
+    <string name="onboarding_permission_allowed">Allowed</string>
+    <string name="onboarding_try_title">Try it</string>
+    <string name="onboarding_try_body">Switch to Utter with the button below, then tap the mic — or hold it to talk. Anything you type here stays on this screen.</string>
+    <string name="onboarding_try_label">Try a sentence</string>
+    <string name="onboarding_try_hint">Type or dictate here…</string>
+    <string name="onboarding_tips_title">Tips for this phone</string>
+    <string name="onboarding_tips_body">How to reach Utter from the keyboard you use today.</string>
+    <string name="onboarding_tip_gboard_title">Gboard</string>
+    <string name="onboarding_tip_gboard_body">Tap the globe key, or hold the space bar, to switch to Utter.</string>
+    <string name="onboarding_tip_samsung_title">Samsung Keyboard</string>
+    <string name="onboarding_tip_samsung_body">Tap the keyboard button in the navigation bar, then choose Utter.</string>
+    <string name="onboarding_tip_oneplus_title">OnePlus Live Alerts</string>
+    <string name="onboarding_tip_oneplus_body">Allow Live Alerts for Utter so the recording timer stays visible while you dictate.</string>
+    <string name="onboarding_notification_settings">Notification settings</string>
+
+    <!-- Server screen (docs/plan.md Task 12) -->
+    <string name="server_section_connection">Connection</string>
+    <string name="server_url_label">Server URL</string>
+    <string name="server_url_hint">https://your-server.example</string>
+    <string name="server_key_label">API key</string>
+    <string name="server_key_hint">Paste your API key</string>
+    <string name="server_show_key">Show key</string>
+    <string name="server_hide_key">Hide key</string>
+    <string name="server_invalid_url">Enter a valid https:// server URL.</string>
+    <string name="server_check">Check connection</string>
+    <string name="server_checking">Checking…</string>
+    <string name="server_check_reach">Server reachable</string>
+    <string name="server_check_key">API key accepted</string>
+    <string name="server_check_live">Live dictation</string>
+    <string name="server_check_models">Cleanup models</string>
+    <string name="server_check_waiting">Waiting</string>
+    <string name="server_check_running">Checking</string>
+    <string name="server_check_ms">%1$d ms</string>
+    <string name="server_models_count">%1$d models</string>
+    <string name="server_models_menu">Pick a model</string>
+    <string name="server_section_cleanup">Cleanup</string>
+    <string name="server_model_label">Cleanup model</string>
+    <string name="server_model_hint">Model name (optional)</string>
+    <string name="server_timeout_label">Cleanup timeout</string>
+    <string name="server_seconds">%1$d s</string>
+    <string name="server_section_share">Share setup</string>
+    <string name="server_share_warning">The setup link contains your API key. Share it only with people you trust.</string>
+    <string name="server_share_button">Create setup link</string>
+    <string name="server_save">Save changes</string>
+    <string name="server_saving">Saving…</string>
+    <string name="server_saved">Saved</string>
+    <string name="server_save_failed">Couldn\'t save. Check the URL and try again.</string>
+    <string name="utter_skip">Skip</string>
+
+    <!-- Share setup (docs/plan.md Task 12) -->
+    <string name="share_body">Open this link on the other phone to fill in the server and key. It contains your API key.</string>
+    <string name="share_missing_title">Not set up yet</string>
+    <string name="share_no_key">Add a server URL and API key first.</string>
+    <string name="share_link_title">Setup link</string>
+    <string name="share_copy">Copy link</string>
+    <string name="share_send">Share link</string>
+    <string name="share_copied">Link copied</string>
+    <string name="share_chooser">Share setup link</string>
+
+    <!-- Setup link confirmation (docs/plan.md Task 12) -->
+    <string name="setup_link_title">Use this server?</string>
+    <string name="setup_link_body">Set up Utter with the server at %1$s? The link also contains an API key.</string>
+    <string name="setup_link_apply">Use it</string>
+    <string name="setup_link_cancel">Cancel</string>
 
     <!-- Panel: live and result states -->
     <string name="utter_panel_hint">Tap the mic, or hold it to talk</string>

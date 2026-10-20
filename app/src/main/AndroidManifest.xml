@@ -29,6 +29,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Setup link shared from another phone (docs/spec.md §17); parsed and confirmed, never trusted. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="utter" android:host="setup" />
+            </intent-filter>
         </activity>
 
         <service

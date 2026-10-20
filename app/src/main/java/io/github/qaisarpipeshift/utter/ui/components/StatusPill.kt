@@ -21,7 +21,7 @@ enum class PillTone { OK, WARN, ERROR, NEUTRAL }
  * screen, and a filled shape stays legible in both themes without an extra icon.
  */
 @Composable
-fun StatusPill(text: String, tone: PillTone = PillTone.OK, modifier: Modifier = Modifier) {
+fun StatusPill(tone: PillTone, text: String, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     val (background, content) = when (tone) {
         PillTone.OK -> scheme.primaryContainer to scheme.onPrimaryContainer

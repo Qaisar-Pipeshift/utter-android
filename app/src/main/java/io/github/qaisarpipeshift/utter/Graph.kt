@@ -37,11 +37,17 @@ class Graph(app: Context) {
     val stats: StatsStore by lazy { StatsStore(appContext.filesDir) }
 
     /**
+     * The app's one HTTP stack: one connection pool shared by the IME, the Server screen's probes and any other
+     * caller, so Utter never keeps more than one idle socket alive (docs/spec.md §10).
+     */
+    val http: Http by lazy { Http() }
+
+    /**
      * Reads settings and the key on every call so a URL or key change applies to the next request. Null means the
      * keyboard is not set up yet — the panel shows the wizard instead of attempting a request.
      */
     val api: Api by lazy {
-        Api(Http()) {
+        Api(http) {
             val current = settings.current()
             val key = secrets.load()
             if (current.baseUrl.isBlank() || key.isNullOrBlank()) {
