@@ -154,6 +154,8 @@
     <string name="utter_clean_dictation">Clean dictation</string>
     <string name="utter_edit_selection">Edit selection</string>
     <string name="utter_edit_label">Edit</string>
+    <string name="utter_label_dictate">Dictate</string>
+    <string name="utter_label_clean">Clean</string>
 
     <!-- Panel: preset sheet -->
     <string name="utter_presets_title">Clean with preset</string>

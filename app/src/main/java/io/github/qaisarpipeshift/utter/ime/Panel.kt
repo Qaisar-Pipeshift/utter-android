@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -322,20 +323,23 @@ private fun ControlRow(
                 onDeleteWord = host::onDeleteWord,
             )
         }
-        MicButton(
-            state = state,
-            haptics = settings.haptics,
-            holdThresholdMs = settings.holdThresholdMs,
-            slideGestures = settings.slideGestures,
-            interactive = interactive,
-            amplitudes = amplitudes,
-            elapsedMs = (state as? PanelState.Recording)?.elapsedMs,
-            onTap = host::onMicTap,
-            onHoldStart = host::onMicHoldStart,
-            onHoldRelease = host::onMicHoldRelease,
-            onCancelGesture = host::onMicCancel,
-            onLockGesture = host::onMicLock,
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            MicButton(
+                state = state,
+                haptics = settings.haptics,
+                holdThresholdMs = settings.holdThresholdMs,
+                slideGestures = settings.slideGestures,
+                interactive = interactive,
+                amplitudes = amplitudes,
+                elapsedMs = (state as? PanelState.Recording)?.elapsedMs,
+                onTap = host::onMicTap,
+                onHoldStart = host::onMicHoldStart,
+                onHoldRelease = host::onMicHoldRelease,
+                onCancelGesture = host::onMicCancel,
+                onLockGesture = host::onMicLock,
+            )
+            ButtonLabel(stringResource(R.string.utter_label_dictate))
+        }
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
             CleanButton(
                 enabled = editable,
@@ -393,14 +397,29 @@ private fun CleanButton(
                 modifier = Modifier.size(24.dp),
             )
         }
-        if (editMode) {
-            Text(
-                text = stringResource(R.string.utter_edit_label),
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        ButtonLabel(
+            stringResource(if (editMode) R.string.utter_edit_label else R.string.utter_label_clean),
+        )
     }
+}
+
+/**
+ * The small caption under the centre keys (docs/spec.md §4).
+ *
+ * Why `clearAndSetSemantics`: the key's icon already carries the accessible name ("Start dictation", "Clean
+ * dictation", "Edit selection"), so the visible caption is for sighted users and TalkBack must not read it twice.
+ * The label never wraps: at the largest font scale it still sits on one line under its key.
+ */
+@Composable
+private fun ButtonLabel(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.padding(top = 2.dp).clearAndSetSemantics { },
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        softWrap = false,
+    )
 }
 
 /** Setup, mic-permission and secure-field states: one icon, one explanation, at most one action. */
