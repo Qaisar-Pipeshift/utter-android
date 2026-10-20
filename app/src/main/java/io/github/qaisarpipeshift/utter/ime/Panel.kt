@@ -67,6 +67,7 @@ interface PanelHost {
     fun onEnter()
     fun onUndo()
     fun onSwap()
+    fun onReadAloud()
     fun onRetry(takeId: String)
     fun onDiscard(takeId: String)
     fun onSwitchBack()
@@ -99,6 +100,7 @@ fun Panel(
     state: PanelState,
     settings: Settings,
     selectionAvailable: Boolean,
+    speaking: Boolean,
     enterAction: EnterAction,
     holdHint: Boolean,
     host: PanelHost,
@@ -177,10 +179,13 @@ fun Panel(
                         StatusStrip(
                             state = state,
                             holdHint = holdHint,
+                            selectionAvailable = selectionAvailable,
+                            speaking = speaking,
                             onRetry = host::onRetry,
                             onDiscard = host::onDiscard,
                             onUndo = host::onUndo,
                             onSwap = host::onSwap,
+                            onReadAloud = host::onReadAloud,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                         )
                         ControlRow(

@@ -452,4 +452,43 @@
     <string name="about_license_handy">Handy — MIT. The Clean preset is adapted from Handy\'s “Improve Transcriptions” prompt.</string>
     <string name="about_section_privacy">Privacy</string>
     <string name="about_privacy_body">Audio goes only to the server you configure. No analytics, no account, no background uploads. History stays on this phone.</string>
+
+    <!-- Extras: process text, shared voice notes, read aloud, quick recorder, tile (docs/plan.md Task 15) -->
+    <string name="extras_close">Close</string>
+    <string name="extras_read_aloud">Read aloud</string>
+    <string name="extras_stop">Stop</string>
+    <string name="extras_read_failed">Can\'t read aloud.</string>
+    <string name="extras_server_error">Server error (HTTP %1$d)</string>
+    <string name="extras_process_title">Utter</string>
+    <string name="extras_process_readonly_note">The result is copied to the clipboard.</string>
+    <string name="extras_process_clean_with">Clean with</string>
+    <string name="extras_process_working">Cleaning…</string>
+    <string name="extras_process_clean_failed">Cleanup failed — keeping the raw text.</string>
+    <string name="extras_share_title">Voice note</string>
+    <string name="extras_share_working">Transcribing…</string>
+    <string name="extras_share_missing">Nothing to transcribe.</string>
+    <string name="extras_share_too_large">That file is too large. The limit is 25 MB.</string>
+    <string name="extras_share_too_long">Voice notes up to 5 minutes are supported.</string>
+    <string name="extras_share_unreadable">Couldn\'t open that file.</string>
+    <string name="extras_share_no_speech">No speech found in this recording.</string>
+    <string name="extras_share_cleaned">Cleaned</string>
+    <string name="extras_share_clean_failed">Cleanup failed — keeping the transcript.</string>
+    <string name="extras_share_saved">Saved to history.</string>
+    <string name="extras_share_history_off">History is off in Settings.</string>
+    <string name="extras_share_copy">Copy</string>
+    <string name="extras_share_share">Share</string>
+    <string name="extras_share_clean">Clean</string>
+    <string name="extras_share_save">Save to history</string>
+    <string name="extras_share_app_label">Shared voice note</string>
+    <string name="extras_share_chooser">Share transcript</string>
+    <string name="extras_quick_title">Quick dictation</string>
+    <string name="extras_quick_hint">Tap the mic, speak, and the text lands on your clipboard.</string>
+    <string name="extras_quick_working">Preparing…</string>
+    <string name="extras_quick_copied">Copied to clipboard</string>
+    <string name="extras_quick_failed">Dictation isn\'t available here.</string>
+    <string name="extras_quick_cancel">Cancel</string>
+    <string name="extras_quick_discard">Discard</string>
+    <string name="extras_quick_setup">Set up Utter with your server before dictating.</string>
+    <string name="extras_quick_app_label">Quick note</string>
+    <string name="extras_tile_label">Utter</string>
 </resources>

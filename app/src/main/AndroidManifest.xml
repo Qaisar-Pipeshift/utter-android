@@ -38,6 +38,42 @@
             </intent-filter>
         </activity>
 
+        <!-- Select text → Utter in the system selection menu (docs/spec.md §17). -->
+        <activity
+            android:name=".extras.ProcessTextActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Utter.Dialog">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- Share → Utter for a voice note (docs/spec.md §17). -->
+        <activity
+            android:name=".extras.ShareAudioActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Utter.Dialog">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+        </activity>
+
+        <!-- The Quick Settings tile's recorder; only this app starts it (docs/spec.md §17). -->
+        <activity
+            android:name=".extras.QuickRecorderActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.Utter.Dialog" />
+
         <service
             android:name=".ime.UtterIme"
             android:exported="true"
@@ -49,6 +85,18 @@
             <meta-data
                 android:name="android.view.im"
                 android:resource="@xml/method" />
+        </service>
+
+        <!-- Quick Settings tile; bound by the system only while the panel is open (docs/spec.md §17). -->
+        <service
+            android:name=".extras.DictateTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_mic"
+            android:label="@string/extras_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
         </service>
     </application>
 </manifest>

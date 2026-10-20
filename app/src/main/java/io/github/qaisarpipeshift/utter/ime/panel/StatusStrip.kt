@@ -9,9 +9,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,6 +25,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -43,10 +49,13 @@ import kotlinx.coroutines.flow.collect
 fun StatusStrip(
     state: PanelState,
     holdHint: Boolean,
+    selectionAvailable: Boolean,
+    speaking: Boolean,
     onRetry: (String) -> Unit,
     onDiscard: (String) -> Unit,
     onUndo: () -> Unit,
     onSwap: () -> Unit,
+    onReadAloud: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier, contentAlignment = Alignment.CenterStart) {
@@ -54,7 +63,7 @@ fun StatusStrip(
             is PanelState.Recording -> LiveText(state)
             is PanelState.Finishing -> StripText(stringResource(R.string.utter_transcribing))
             is PanelState.Failed -> FailedStrip(state, onRetry, onDiscard)
-            is PanelState.Idle -> IdleStrip(state, holdHint, onUndo, onSwap)
+            is PanelState.Idle -> IdleStrip(state, holdHint, selectionAvailable, speaking, onUndo, onSwap, onReadAloud)
             else -> Unit
         }
     }
@@ -89,9 +98,17 @@ private fun LiveText(state: PanelState.Recording) {
 }
 
 @Composable
-private fun IdleStrip(state: PanelState.Idle, holdHint: Boolean, onUndo: () -> Unit, onSwap: () -> Unit) {
+private fun IdleStrip(
+    state: PanelState.Idle,
+    holdHint: Boolean,
+    selectionAvailable: Boolean,
+    speaking: Boolean,
+    onUndo: () -> Unit,
+    onSwap: () -> Unit,
+    onReadAloud: () -> Unit,
+) {
     val result = state.result
-    if (result == null && state.pendingCount == 0 && !state.offline && !holdHint) {
+    if (result == null && state.pendingCount == 0 && !state.offline && !holdHint && !selectionAvailable) {
         StripText(stringResource(R.string.utter_panel_hint), muted = true)
         return
     }
@@ -116,6 +133,14 @@ private fun IdleStrip(state: PanelState.Idle, holdHint: Boolean, onUndo: () -> U
             if (result.canUndo) {
                 Chip(label = stringResource(R.string.utter_undo), onClick = onUndo)
             }
+        }
+        if (selectionAvailable) {
+            // Read aloud works on whatever is selected right now; the same chip becomes Stop while speaking.
+            Chip(
+                label = stringResource(if (speaking) R.string.extras_stop else R.string.extras_read_aloud),
+                icon = if (speaking) Icons.Rounded.Stop else Icons.Rounded.VolumeUp,
+                onClick = onReadAloud,
+            )
         }
         if (state.pendingCount > 0) {
             Chip(label = stringResource(R.string.utter_pending, state.pendingCount), muted = true)
@@ -194,7 +219,7 @@ private fun StripText(text: String, muted: Boolean = false) {
 }
 
 /**
- * A rounded pill: a result, an action, or a quiet note. Text only — the panel stays calm.
+ * A rounded pill: a result, an action, or a quiet note. At most one small icon — the panel stays calm.
  *
  * The visual pill is small, but the clickable box is a full 48 dp tall, so the target is thumb-sized without a
  * chunky key look.
@@ -205,6 +230,7 @@ private fun Chip(
     onClick: (() -> Unit)? = null,
     emphasized: Boolean = false,
     muted: Boolean = false,
+    icon: ImageVector? = null,
 ) {
     val background = if (emphasized) {
         MaterialTheme.colorScheme.primary
@@ -222,12 +248,22 @@ private fun Chip(
             .clickable(enabled = onClick != null) { onClick?.invoke() },
         contentAlignment = Alignment.Center,
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
                 .background(background)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = content,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
             Text(text = label, fontSize = 12.sp, color = content, maxLines = 1)
         }
     }

@@ -160,10 +160,13 @@ private fun PanelPreview(height: PanelHeight) {
             StatusStrip(
                 state = PreviewState,
                 holdHint = false,
+                selectionAvailable = false,
+                speaking = false,
                 onRetry = {},
                 onDiscard = {},
                 onUndo = {},
                 onSwap = {},
+                onReadAloud = {},
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
             Row(

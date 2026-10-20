@@ -47,6 +47,7 @@ import io.github.qaisarpipeshift.utter.data.Settings
 import io.github.qaisarpipeshift.utter.data.ThemeMode
 import io.github.qaisarpipeshift.utter.notify.LiveStatus
 import io.github.qaisarpipeshift.utter.ui.theme.UtterTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +107,10 @@ class UtterIme :
     /** Shown briefly when a tap lands in hold-only mode instead of starting a take. */
     private val holdHint = MutableStateFlow(false)
     private var holdHintJob: Job? = null
+
+    /** True while read-aloud audio is playing, so the status strip can offer Stop instead of Read aloud. */
+    private val speakingState = MutableStateFlow(false)
+    private var speechJob: Job? = null
 
     private var lastControllerState: PanelState = PanelState.Idle(null, 0, false)
 
@@ -178,6 +183,7 @@ class UtterIme :
                 val selection by selectionState.collectAsState()
                 val field by fieldState.collectAsState()
                 val holdHintNow by holdHint.collectAsState()
+                val speaking by speakingState.collectAsState()
                 val dark = when (settings.theme) {
                     ThemeMode.SYSTEM -> isSystemInDarkTheme()
                     ThemeMode.LIGHT -> false
@@ -188,6 +194,7 @@ class UtterIme :
                         state = state,
                         settings = settings,
                         selectionAvailable = selection != null,
+                        speaking = speaking,
                         enterAction = field?.actionLabel ?: EnterAction.NEWLINE,
                         holdHint = holdHintNow,
                         host = this@UtterIme,
@@ -216,15 +223,17 @@ class UtterIme :
         refreshUi()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         refreshKeyPresence()
-        if (!restarting && info != null && graph.settings.current().autoStart && canDictate() &&
-            lastControllerState is PanelState.Idle
-        ) {
+        // A Blocked state belongs to the previous app; in this app it is as idle as an Idle chip is.
+        val idleNow = lastControllerState is PanelState.Idle || lastControllerState is PanelState.Blocked
+        if (!restarting && info != null && graph.settings.current().autoStart && canDictate() && idleNow) {
             startMicTake()
         }
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
         controller.onPanelHidden()
+        // The sheet that owns the Stop chip is gone; never leave audio playing with no visible way to end it.
+        stopReadAloud()
         selectionState.value = null
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         super.onFinishInputView(finishingInput)
@@ -250,6 +259,7 @@ class UtterIme :
     }
 
     override fun onDestroy() {
+        stopReadAloud()
         if (::liveStatus.isInitialized) liveStatus.cancel()
         imeScope.cancel()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
@@ -326,6 +336,42 @@ class UtterIme :
         controller.swap()
     }
 
+    /** Read the selection on the same server that transcribes, through the shared PCM player (docs/spec.md §17). */
+    override fun onReadAloud() {
+        if (speakingState.value) {
+            stopReadAloud()
+            return
+        }
+        val text = inputOps.selection() ?: return
+        val settings = graph.settings.current()
+        graph.pcmPlayer.stop()
+        speakingState.value = true
+        graph.diag.event("read_aloud_start")
+        speechJob?.cancel()
+        speechJob = imeScope.launch {
+            val result: Result<Unit> = try {
+                graph.api.speech(text, settings.ttsVoice) { chunk, rate ->
+                    graph.pcmPlayer.write(chunk, rate)
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                Result.failure(IllegalStateException("speech"))
+            }
+            // A cancelled job leaves the stop to stopReadAloud(); only a finished one stops its own track here.
+            graph.pcmPlayer.stop()
+            speakingState.value = false
+            graph.diag.event(if (result.isFailure) "read_aloud_failed" else "read_aloud_done")
+        }
+    }
+
+    private fun stopReadAloud() {
+        speechJob?.cancel()
+        speechJob = null
+        if (::graph.isInitialized) graph.pcmPlayer.stop()
+        speakingState.value = false
+    }
+
     override fun onRetry(takeId: String) {
         controller.retry(takeId)
     }
@@ -370,6 +416,8 @@ class UtterIme :
         val field = fieldState.value ?: return
         if (field.kind == FieldKind.PASSWORD) return
         if (blockedHere()) return
+        // The mic must open into silence: stop any read-aloud clip before recording starts.
+        stopReadAloud()
         val selection = if (action == TakeAction.EDIT_SELECTION) inputOps.selection() else null
         controller.start(TakeRequest(action, presetId, field, selection), holding)
     }
@@ -389,6 +437,8 @@ class UtterIme :
             blockedHere() -> PanelState.Blocked
             setupNeeded() -> PanelState.SetupNeeded
             !micGranted() -> PanelState.MicPermissionNeeded
+            // A controller that refused a take in the previous app must not keep this app's panel locked.
+            lastControllerState is PanelState.Blocked -> PanelState.Idle(result = null, pendingCount = 0, offline = false)
             else -> lastControllerState
         }
     }
