@@ -32,9 +32,7 @@ class DictateTileService : TileService() {
      * Android 14 requires the `PendingIntent` overload; older releases only have the `Intent` one, which is
      * deprecated but still the only API they know.
      */
-    @Suppress("DEPRECATION")
-    // The Intent overload is only reached below API 34, where it is the supported call.
-    @SuppressLint("StartActivityAndCollapseDeprecated")
+    @SuppressLint("StartActivityAndCollapseDeprecated") // the Intent overload is only reached below API 34
     @Suppress("DEPRECATION")
     override fun onClick() {
         super.onClick()
