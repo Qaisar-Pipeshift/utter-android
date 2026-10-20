@@ -234,13 +234,15 @@ class ApiTest {
     @Test
     fun `live probe succeeds once the session is updated`() = runBlocking {
         server.enqueue(
-            MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
-                override fun onMessage(webSocket: WebSocket, text: String) {
-                    if (JSONObject(text).optString("type") == "session.update") {
-                        webSocket.send("""{"type":"session.updated"}""")
+            MockResponse().withWebSocketUpgrade(
+                ClosingListener(object : WebSocketListener() {
+                    override fun onMessage(webSocket: WebSocket, text: String) {
+                        if (JSONObject(text).optString("type") == "session.update") {
+                            webSocket.send("""{"type":"session.updated"}""")
+                        }
                     }
-                }
-            }),
+                }),
+            ),
         )
 
         val probe = api().probeLive()

@@ -37,7 +37,7 @@ class LiveSessionTest {
     }
 
     private fun serve(listener: WebSocketListener) {
-        server.enqueue(MockResponse().withWebSocketUpgrade(listener))
+        server.enqueue(MockResponse().withWebSocketUpgrade(ClosingListener(listener)))
     }
 
     private fun collect(handle: LiveHandle): List<LiveEvent> = runBlocking {
