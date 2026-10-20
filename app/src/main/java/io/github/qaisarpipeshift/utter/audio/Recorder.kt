@@ -22,6 +22,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -62,6 +64,11 @@ interface TakeRecorder {
  * Why `VOICE_RECOGNITION`: it applies the noise-suppression path tuned for ASR without the AGC that makes dictation
  * pump. The read loop lives on its own IO coroutine and owns the mic release (`finally`), so an error, a stop or a
  * cancel all end with a released `AudioRecord` even if the caller forgets to stop.
+ *
+ * Why the [gate]: opening the mic suspends on IO while `AudioRecord` is created and started. A stop that ran first
+ * would find nothing to close, the open would finish afterwards and the microphone would stay held for the life of
+ * the process (every later take answers BUSY). [stop] and [cancel] therefore wait for the open, and [start] checks
+ * [stopRequested] right after `startRecording` so a stop that arrived mid-open releases the mic immediately.
  */
 class AndroidRecorder(
     private val context: Context,
@@ -71,6 +78,13 @@ class AndroidRecorder(
 
     private val lock = Any()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Serialises open, stop and cancel so no two of them can interleave on the `AudioRecord`. */
+    private val gate = Mutex()
+
+    /** Set before a stop waits for [gate]; [start] checks it right after startRecording and releases at once. */
+    @Volatile
+    private var stopRequested = false
 
     @Volatile
     private var running = false
@@ -86,113 +100,142 @@ class AndroidRecorder(
         onChunk: (ByteArray, Float) -> Unit,
         onError: (Int) -> Unit,
     ): RecorderStart =
-        withContext(Dispatchers.IO) {
-            synchronized(lock) {
-                if (record != null) return@withContext RecorderStart.Error(BUSY, "already recording")
+        gate.withLock {
+            withContext(Dispatchers.IO) {
+                // Any stop from the previous take is stale; a stop that arrives after this line aborts this open.
+                stopRequested = false
+                open(out, onChunk, onError)
             }
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                return@withContext RecorderStart.Error(NO_PERMISSION, "no permission")
-            }
-
-            val minBuffer = AudioRecord.getMinBufferSize(
-                Pcm.SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-            )
-            val bufferBytes = maxOf(minBuffer, CHUNK_SAMPLES * Pcm.BYTES_PER_SAMPLE * READ_BUFFER_FACTOR)
-            val recorder = try {
-                AudioRecord(
-                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                    Pcm.SAMPLE_RATE,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    bufferBytes,
-                )
-            } catch (failure: Exception) {
-                diag.event("recorder_create", failure.javaClass.simpleName)
-                return@withContext RecorderStart.Error(CREATE_FAILED, "create failed")
-            }
-
-            if (recorder.state != AudioRecord.STATE_INITIALIZED) {
-                val code = recorder.state
-                recorder.release()
-                diag.event("recorder_state", code.toString())
-                return@withContext RecorderStart.Error(code, "not initialized")
-            }
-
-            settings().micId?.let { id ->
-                preferredInput(id)?.let { device ->
-                    try {
-                        recorder.setPreferredDevice(device)
-                    } catch (_: IllegalArgumentException) {
-                        // The device disappeared between listing and starting; the default mic is fine.
-                    }
-                }
-            }
-
-            val started = try {
-                recorder.startRecording()
-                recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING
-            } catch (_: Exception) {
-                false
-            }
-            if (!started) {
-                val code = recorder.recordingState
-                try {
-                    recorder.stop()
-                } catch (_: IllegalStateException) {
-                    // Not recording — release is all that is left.
-                }
-                recorder.release()
-                diag.event("recorder_start", code.toString())
-                return@withContext RecorderStart.Error(code, "start failed")
-            }
-
-            val buffered = try {
-                BufferedOutputStream(FileOutputStream(out), STREAM_BUFFER_BYTES)
-            } catch (failure: IOException) {
-                recorder.release()
-                diag.event("recorder_file", failure.javaClass.simpleName)
-                return@withContext RecorderStart.Error(FILE_FAILED, "file failed")
-            }
-
-            synchronized(lock) {
-                record = recorder
-                stream = buffered
-                output = out
-                bytesWritten = 0
-            }
-            running = true
-            launchReadLoop(recorder, buffered, onChunk, onError)
-            RecorderStart.Ok
         }
 
-    override suspend fun stop(): Long = withContext(Dispatchers.IO) {
-        val tail = settings().tailMs.coerceIn(0, MAX_TAIL_MS)
-        if (tail > 0 && running) delay(tail.toLong())
-        running = false
-        val current = synchronized(lock) { job }
-        current?.join()
-        synchronized(lock) { job = null }
-        releaseRecording()
-        val written = synchronized(lock) { bytesWritten }
-        closeStream(delete = false)
-        Pcm.durationMs(written, Pcm.SAMPLE_RATE)
+    override suspend fun stop(): Long {
+        stopRequested = true
+        return gate.withLock {
+            withContext(Dispatchers.IO) {
+                val tail = settings().tailMs.coerceIn(0, MAX_TAIL_MS)
+                if (tail > 0 && running) delay(tail.toLong())
+                running = false
+                val current = synchronized(lock) { job }
+                current?.join()
+                synchronized(lock) { job = null }
+                releaseRecording()
+                val written = synchronized(lock) { bytesWritten }
+                closeStream(delete = false)
+                Pcm.durationMs(written, Pcm.SAMPLE_RATE)
+            }
+        }
     }
 
     override fun cancel() {
         running = false
-        val current = synchronized(lock) { job }
-        // Stopping the recorder unblocks a read that is waiting for its 100 ms of audio before join can finish.
-        stopRecording()
+        stopRequested = true
         scope.launch {
-            withTimeoutOrNull(JOIN_TIMEOUT_MS) { current?.join() }
-            synchronized(lock) { job = null }
-            releaseRecording()
-            closeStream(delete = true)
+            gate.withLock {
+                val current = synchronized(lock) { job }
+                // Stopping the recorder unblocks a read that is waiting for its 100 ms of audio before join finishes.
+                stopRecording()
+                withTimeoutOrNull(JOIN_TIMEOUT_MS) { current?.join() }
+                synchronized(lock) { job = null }
+                releaseRecording()
+                closeStream(delete = true)
+            }
         }
+    }
+
+    /** Opens the mic; runs under [gate] on IO. Every failure is a value the panel can show. */
+    private fun open(
+        out: File,
+        onChunk: (ByteArray, Float) -> Unit,
+        onError: (Int) -> Unit,
+    ): RecorderStart {
+        synchronized(lock) {
+            if (record != null) return RecorderStart.Error(BUSY, "already recording")
+        }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return RecorderStart.Error(NO_PERMISSION, "no permission")
+        }
+
+        val minBuffer = AudioRecord.getMinBufferSize(
+            Pcm.SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+        )
+        val bufferBytes = maxOf(minBuffer, CHUNK_SAMPLES * Pcm.BYTES_PER_SAMPLE * READ_BUFFER_FACTOR)
+        val recorder = try {
+            AudioRecord(
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                Pcm.SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferBytes,
+            )
+        } catch (failure: Exception) {
+            diag.event("recorder_create", failure.javaClass.simpleName)
+            return RecorderStart.Error(CREATE_FAILED, "create failed")
+        }
+
+        if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+            val code = recorder.state
+            recorder.release()
+            diag.event("recorder_state", code.toString())
+            return RecorderStart.Error(code, "not initialized")
+        }
+
+        settings().micId?.let { id ->
+            preferredInput(id)?.let { device ->
+                try {
+                    recorder.setPreferredDevice(device)
+                } catch (_: IllegalArgumentException) {
+                    // The device disappeared between listing and starting; the default mic is fine.
+                }
+            }
+        }
+
+        val started = try {
+            recorder.startRecording()
+            recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING
+        } catch (_: Exception) {
+            false
+        }
+        if (!started) {
+            val code = recorder.recordingState
+            try {
+                recorder.stop()
+            } catch (_: IllegalStateException) {
+                // Not recording — release is all that is left.
+            }
+            recorder.release()
+            diag.event("recorder_start", code.toString())
+            return RecorderStart.Error(code, "start failed")
+        }
+
+        if (stopRequested) {
+            // A stop landed while the mic was opening: release it now, before any audio is captured. The take's own
+            // stop() then finds nothing to stop, which is exactly the "one start, one stop" the caller asked for.
+            recorder.release()
+            diag.event("recorder_stop_requested")
+            return RecorderStart.Ok
+        }
+
+        val buffered = try {
+            BufferedOutputStream(FileOutputStream(out), STREAM_BUFFER_BYTES)
+        } catch (failure: IOException) {
+            recorder.release()
+            diag.event("recorder_file", failure.javaClass.simpleName)
+            return RecorderStart.Error(FILE_FAILED, "file failed")
+        }
+
+        synchronized(lock) {
+            record = recorder
+            stream = buffered
+            output = out
+            bytesWritten = 0
+        }
+        running = true
+        launchReadLoop(recorder, buffered, onChunk, onError)
+        return RecorderStart.Ok
     }
 
     private fun launchReadLoop(

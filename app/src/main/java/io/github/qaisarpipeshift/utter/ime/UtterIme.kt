@@ -52,6 +52,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -126,7 +127,7 @@ class UtterIme :
         savedState.performRestore(null)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
 
-        inputOps = InputOps(this, { graph.settings.current() }, graph.diag, ::onInserted)
+        inputOps = InputOps(this, { graph.settings.current() }, graph.diag)
         controller = DictationController(
             scope = imeScope,
             settings = { graph.settings.current() },
@@ -140,6 +141,8 @@ class UtterIme :
             isOnline = ::isOnline,
             haptic = ::performHaptic,
             diag = graph.diag,
+            // The switch to the previous keyboard runs only after the take's bookkeeping has finished.
+            onInsertDone = ::onInserted,
         )
 
         liveStatus = LiveStatus(this, { graph.settings.current() }, imeScope)
@@ -261,6 +264,9 @@ class UtterIme :
     override fun onDestroy() {
         stopReadAloud()
         if (::liveStatus.isInitialized) liveStatus.cancel()
+        // Release the microphone and keep whatever was captured as a pending take. The shutdown runs on its own
+        // NonCancellable job: the scope is cancelled on the next line, and a take must survive that.
+        if (::controller.isInitialized) imeScope.launch(NonCancellable) { controller.shutdown() }
         imeScope.cancel()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         viewModelStore.clear()

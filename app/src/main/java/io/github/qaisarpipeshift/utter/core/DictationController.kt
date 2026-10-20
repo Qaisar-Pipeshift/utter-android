@@ -19,7 +19,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Speech-to-text behind one small port: a live socket for previews, one upload for the fallback. */
@@ -111,6 +115,12 @@ class DictationController(
     private val haptic: (Haptic) -> Unit = {},
     private val diag: Diag = Diag(),
     /**
+     * Runs after a committed insert and after its bookkeeping (history, stats, pending queue, Idle) is complete.
+     * The IME uses it to hand the user back to the previous keyboard: switching mid-bookkeeping would cancel work
+     * that the take cannot be finished without.
+     */
+    private val onInsertDone: () -> Unit = {},
+    /**
      * History label for a take that has no app of its own, such as the Quick Settings recorder. Null keeps the
      * normal `seenApps` label of [FieldInfo.pkg]; the field's package still keys the app rule.
      */
@@ -124,6 +134,16 @@ class DictationController(
      * suspends on the pending store before the panel state becomes [PanelState.Recording].
      */
     private val operationBusy = AtomicBoolean(false)
+
+    /**
+     * A stop() that lands while the take is still being prepared (the hold released during `pending.newTake`) would
+     * otherwise be dropped; startTake consumes it right after the state becomes [PanelState.Recording] and finishes
+     * the take before the mic is ever opened.
+     */
+    private val stopRequested = AtomicBoolean(false)
+
+    /** The mic open still in flight; stop/cancel/shutdown await it so `AudioRecord` is never left open. */
+    private var recorderStart: Deferred<RecorderStart>? = null
 
     private var take: Take? = null
 
@@ -142,6 +162,8 @@ class DictationController(
     /** Starts a take. Ignored while another take is starting, recording or finishing. */
     fun start(request: TakeRequest, holding: Boolean = false) {
         if (!operationBusy.compareAndSet(false, true)) return
+        // A stop from the previous gesture is stale; a stop that arrives after this line belongs to this take.
+        stopRequested.set(false)
         scope.launch {
             try {
                 startTake(request, holding)
@@ -151,8 +173,9 @@ class DictationController(
         }
     }
 
-    /** Ends the take and runs it to insertion. Ignored unless recording. */
+    /** Ends the take and runs it to insertion. A stop that lands before [PanelState.Recording] is remembered. */
     fun stop() {
+        stopRequested.set(true)
         scope.launch { finishCurrent() }
     }
 
@@ -261,13 +284,20 @@ class DictationController(
             committed = "",
             tentative = "",
         )
+
+        // The finger was released while the take was still being prepared: finish it now, before opening the mic.
+        if (stopRequested.compareAndSet(true, false)) {
+            finishCurrent()
+            return
+        }
+
         diag.event("take_start", request.action.name)
         haptic(Haptic.START)
         startTicker()
         startLive(started)
 
         val outcome = try {
-            recorder.start(file, ::onChunk, ::onRecorderError)
+            startRecorder(started)
         } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
             // The interface promises a value; an implementation bug must still not strand the panel in Recording.
@@ -284,8 +314,32 @@ class DictationController(
         }
     }
 
+    /**
+     * Opens the mic in its own coroutine and remembers the handle. `start()` suspends on IO while `AudioRecord` is
+     * being created and started, so a stop that arrives in that window must wait for it: calling `stop()` first would
+     * race the open and leave the microphone held (every later take answers BUSY).
+     */
+    private suspend fun startRecorder(started: Take): RecorderStart {
+        val deferred = scope.async { recorder.start(started.file, ::onChunk, ::onRecorderError) }
+        recorderStart = deferred
+        return deferred.await()
+    }
+
+    /** Waits for an in-flight mic open before stopping it; [quiet] also swallows the cancellation of a dying scope. */
+    private suspend fun awaitRecorderStart(quiet: Boolean = false) {
+        val deferred = recorderStart ?: return
+        try {
+            deferred.await()
+        } catch (failure: CancellationException) {
+            if (!quiet) throw failure
+        } catch (_: Exception) {
+            // A failed open is already reported by startTake; there is no audio to close.
+        }
+    }
+
     private suspend fun finishCurrent() {
         val recording = _state.value as? PanelState.Recording ?: return
+        stopRequested.set(false)
         val started = take
         _state.value = PanelState.Finishing(recording.action)
         tickerJob?.cancel()
@@ -296,11 +350,14 @@ class DictationController(
 
         if (started == null) {
             // Defensive: a take without its metadata cannot be retried; do not invent one.
+            awaitRecorderStart()
             recorder.cancel()
             _state.value = idleState(null)
             return
         }
 
+        // The mic may still be opening; the stop is only real once the open has returned.
+        awaitRecorderStart()
         val duration = recorder.stop()
         started.durationMs = duration
         diag.event("take_stop", duration.toString())
@@ -322,6 +379,7 @@ class DictationController(
 
     private suspend fun cancelTake() {
         if (_state.value !is PanelState.Recording) return
+        stopRequested.set(false)
         val started = take
         tickerJob?.cancel()
         tickerJob = null
@@ -329,6 +387,8 @@ class DictationController(
         specJob = null
         if (started?.settings?.liveInField == true) clearPreviewSafely()
         stopLive(cancel = true)
+        // Same ordering rule as stop: the cancel must not race an in-flight mic open.
+        awaitRecorderStart()
         recorder.cancel()
         started?.let { quietStore { pending.delete(it.id) } }
         clearTake()
@@ -336,6 +396,46 @@ class DictationController(
         haptic(Haptic.CANCEL)
         diag.event("take_cancel")
         _state.value = idleState(null)
+    }
+
+    /**
+     * The host is going away (the IME service is destroyed, the quick sheet closes): close the microphone, drop the
+     * live socket and keep whatever was captured as a pending take, so shutting down can never lose audio. The stop
+     * and store work runs [NonCancellable] because the caller cancels its scope immediately after; calling it twice
+     * is harmless.
+     */
+    suspend fun shutdown() {
+        operationBusy.set(true)
+        stopRequested.set(false)
+        val started = take
+        val recording = _state.value is PanelState.Recording
+        tickerJob?.cancel()
+        tickerJob = null
+        specJob?.cancel()
+        specJob = null
+        stopLive(cancel = true)
+        withContext(NonCancellable) {
+            if (started == null || !recording) {
+                // Nothing was being recorded: just make sure the mic is released. A kept take's file is untouched.
+                runCatching { recorder.cancel() }
+            } else {
+                awaitRecorderStart(quiet = true)
+                val duration = try {
+                    recorder.stop()
+                } catch (_: Exception) {
+                    0L
+                }
+                started.durationMs = duration
+                if (duration < MIN_TAKE_MS) {
+                    quietStore { pending.delete(started.id) }
+                } else {
+                    quietStore { pending.update(started.id, ERROR_SHUTDOWN, duration) }
+                    diag.event("take_shutdown", duration.toString())
+                }
+            }
+            clearTake()
+            if (started != null && recording) _state.value = idleState(null)
+        }
     }
 
     private suspend fun retryTake(takeId: String) {
@@ -549,11 +649,24 @@ class DictationController(
     }
 
     private suspend fun insertDone(started: Take, speech: SttResult.Text, done: Completion.Done) {
-        val snapshot = started.settings
         val meta = InsertMeta(started.field, done.replaceSelection, started.request.selection)
         val inserted = guarded(false) { inserter.insert(done.text, meta) }
         diag.event(if (inserted) "insert" else "insert_clipboard")
+        // The bookkeeping must survive the panel going away: handing the user back to the previous keyboard (the
+        // callback below) hides this window, and a take lost after its text landed is exactly what must not happen.
+        withContext(NonCancellable) { recordInsert(started, speech, done, meta, inserted) }
+        if (inserted) onInsertDone()
+    }
 
+    /** History, stats, the pending queue and the result chip of a committed insert; never cancelled halfway. */
+    private suspend fun recordInsert(
+        started: Take,
+        speech: SttResult.Text,
+        done: Completion.Done,
+        meta: InsertMeta,
+        inserted: Boolean,
+    ) {
+        val snapshot = started.settings
         val rule = AppRules.ruleFor(snapshot.appRules, started.field.pkg)
         val statsAllowed = AppRules.historyAllowed(rule, started.field.incognito)
         val words = TextOps.wordCount(done.text)
@@ -780,6 +893,7 @@ class DictationController(
         liveJob = null
         live = null
         finalEvent = null
+        recorderStart = null
         take = null
     }
 
@@ -859,5 +973,8 @@ class DictationController(
         const val SPECULATIVE_DELAY_MS = 900L
         const val KIND_OFFLINE = "offline"
         const val RECORDER_FAILED = -1
+
+        /** Pending-take error for audio kept when the host shut down mid-take; the take is retryable. */
+        const val ERROR_SHUTDOWN = "shutdown"
     }
 }

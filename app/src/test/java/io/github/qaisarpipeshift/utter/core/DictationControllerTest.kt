@@ -15,6 +15,7 @@ import io.github.qaisarpipeshift.utter.net.LiveHandle
 import io.github.qaisarpipeshift.utter.net.SttResult
 import java.io.File
 import java.time.LocalDate
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -66,7 +67,10 @@ class DictationControllerTest {
         stats = StatsStore(folder.newFolder("stats"), io = Dispatchers.Unconfined, clock = { DAY })
     }
 
-    private fun TestScope.controller(pendingStore: PendingStore = pending): DictationController = DictationController(
+    private fun TestScope.controller(
+        pendingStore: PendingStore = pending,
+        onInsertDone: () -> Unit = {},
+    ): DictationController = DictationController(
         scope = this,
         settings = { settings },
         recorder = recorder,
@@ -80,6 +84,7 @@ class DictationControllerTest {
         isOnline = { online },
         haptic = { haptics += it },
         diag = diag,
+        onInsertDone = onInsertDone,
     )
 
     private fun request(
@@ -740,6 +745,126 @@ class DictationControllerTest {
         assertEquals(1, pending.list().size)
     }
 
+    // ---- recorder ordering and shutdown ----
+
+    @Test
+    fun `a stop during a suspended recorder start waits and releases exactly once`() = runTest {
+        transcriber.liveEnabled = false
+        val gate = CompletableDeferred<Unit>()
+        recorder.startGate = gate
+        val controller = controller()
+
+        controller.start(request())
+        runCurrent()
+        assertEquals(1, recorder.startCalls)
+
+        controller.stop()
+        runCurrent()
+        // The stop is real only once the mic open returns; stopping first would race it and leave the mic held.
+        assertEquals(0, recorder.stopCalls)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1, recorder.startCalls)
+        assertEquals(1, recorder.stopCalls)
+        assertTrue(recorder.released)
+        assertEquals(1, transcriber.uploads)
+        assertEquals("hello world", inserter.inserts.single().first)
+        assertTrue(pending.list().isEmpty())
+        assertTrue(controller.state.value is PanelState.Idle)
+    }
+
+    @Test
+    fun `a stop that lands before recording is consumed so the mic never opens`() = runTest {
+        transcriber.liveEnabled = false
+        recorder.durationMs = 0
+        // The store's own dispatcher parks the start inside pending.newTake, which is exactly the hold-release race.
+        val slowPending = PendingStore(cacheDir, filesDir, io = StandardTestDispatcher(testScheduler))
+        val controller = controller(slowPending)
+
+        controller.start(request())
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals(0, recorder.startCalls)
+        assertNull(transcriber.handle)
+        assertTrue(slowPending.list().isEmpty())
+        assertTrue(controller.state.value is PanelState.Idle)
+    }
+
+    @Test
+    fun `shutdown stops the take and keeps the audio as a pending take`() = runTest {
+        val controller = controller()
+        controller.start(request())
+        runCurrent()
+
+        controller.shutdown()
+        advanceUntilIdle()
+
+        assertEquals(1, recorder.stopCalls)
+        assertEquals(1, transcriber.handle!!.cancels)
+        val kept = pending.list().single()
+        assertEquals("shutdown", kept.lastError)
+        assertEquals(1_500L, kept.durationMs)
+        assertTrue(pending.pcmFile(kept.id).exists())
+        assertTrue(controller.state.value is PanelState.Idle)
+    }
+
+    @Test
+    fun `shutdown without a take only releases the recorder`() = runTest {
+        val controller = controller()
+
+        controller.shutdown()
+
+        assertEquals(1, recorder.cancelCalls)
+        assertTrue(pending.list().isEmpty())
+    }
+
+    // ---- the keyboard hand-back ----
+
+    @Test
+    fun `the keyboard hand-back runs after the post-insert bookkeeping`() = runTest {
+        transcriber.liveEnabled = false
+        var historyAtHandBack = -1
+        var chipAtHandBack: String? = null
+        lateinit var controller: DictationController
+        controller = controller(
+            onInsertDone = {
+                // The switch would hide the panel; by the time it runs, the take must be fully recorded.
+                historyAtHandBack = history.list().size
+                chipAtHandBack = (controller.state.value as? PanelState.Idle)?.result?.text
+            },
+        )
+
+        controller.start(request())
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals(1, historyAtHandBack)
+        assertEquals("hello world", chipAtHandBack)
+        assertTrue(pending.list().isEmpty())
+    }
+
+    @Test
+    fun `no keyboard hand-back when the text went to the clipboard`() = runTest {
+        transcriber.liveEnabled = false
+        inserter.result = false
+        var handedBack = false
+        val controller = controller(onInsertDone = { handedBack = true })
+
+        controller.start(request())
+        runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        assertFalse(handedBack)
+        val idle = controller.state.value as PanelState.Idle
+        assertEquals("hello world", idle.result?.text)
+        assertFalse(idle.result!!.canUndo)
+    }
+
     private companion object {
         val DAY: LocalDate = LocalDate.of(2026, 10, 20)
     }
@@ -752,6 +877,10 @@ private class FakeRecorder : TakeRecorder {
     var cancelCalls = 0
     var startCalls = 0
     var started = false
+    var released = false
+
+    /** When set, the mic open parks here, which is exactly the window a stop must wait for. */
+    var startGate: CompletableDeferred<Unit>? = null
 
     private var chunkSink: ((ByteArray, Float) -> Unit)? = null
     private var errorSink: ((Int) -> Unit)? = null
@@ -762,6 +891,7 @@ private class FakeRecorder : TakeRecorder {
         onError: (Int) -> Unit,
     ): RecorderStart {
         startCalls++
+        startGate?.await()
         started = true
         chunkSink = onChunk
         errorSink = onError
@@ -779,6 +909,7 @@ private class FakeRecorder : TakeRecorder {
 
     override suspend fun stop(): Long {
         stopCalls++
+        released = true
         return durationMs
     }
 

@@ -33,7 +33,6 @@ class InputOps(
     private val ime: InputMethodService,
     private val settings: () -> Settings,
     private val diag: Diag,
-    private val onInserted: () -> Unit = {},
 ) : Inserter {
 
     /** The last committed insert, for undo and swap; only a text that is still exactly before the cursor can match. */
@@ -41,7 +40,21 @@ class InputOps(
 
     private var last: Last? = null
 
-    override fun insert(text: String, meta: InsertMeta): Boolean {
+    /**
+     * Inserts [text] into the current field. Any failure of the `InputConnection` (a dead editor, an app that
+     * rejects the edit) ends in the clipboard copy and `false`, so the controller's "field was gone" path keeps the
+     * take and the text is never silently lost.
+     */
+    override fun insert(text: String, meta: InsertMeta): Boolean =
+        try {
+            insertInto(text, meta)
+        } catch (failure: Exception) {
+            diag.event("insert_failed", failure.javaClass.simpleName)
+            copy(text)
+            false
+        }
+
+    private fun insertInto(text: String, meta: InsertMeta): Boolean {
         val connection = ime.currentInputConnection
         val editor = ime.currentInputEditorInfo
         if (connection == null || editor == null || !sameField(meta, editor)) {
@@ -70,7 +83,6 @@ class InputOps(
         last = Last(out, field.pkg, field.fieldId)
         if (snapshot.copyToClipboard) copy(text)
         if (autoSend(snapshot, field.pkg)) enter(meta.field.actionLabel)
-        onInserted()
         return true
     }
 
@@ -100,7 +112,6 @@ class InputOps(
         last = null
         if (snapshot.copyToClipboard) copy(text)
         if (autoSend(snapshot, pkg)) enter(meta.field.actionLabel)
-        onInserted()
         return true
     }
 
@@ -230,9 +241,14 @@ class InputOps(
         FieldKind.URI, FieldKind.EMAIL, FieldKind.NUMBER, FieldKind.PHONE, FieldKind.PASSWORD -> false
     }
 
+    /** The fallback path; a clipboard that refuses (or a restricted profile) must not throw out of [insert]. */
     private fun copy(text: String) {
         val manager = ime.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-        manager.setPrimaryClip(ClipData.newPlainText(CLIP_LABEL, text))
+        try {
+            manager.setPrimaryClip(ClipData.newPlainText(CLIP_LABEL, text))
+        } catch (_: Exception) {
+            diag.event("clipboard_failed")
+        }
     }
 
     private companion object {
