@@ -3,6 +3,7 @@ package io.github.qaisarpipeshift.utter.pulse
 import android.app.Notification
 import android.os.Build
 import android.os.Bundle
+import android.os.Parcelable
 import android.service.notification.NotificationListenerService
 import android.service.notification.NotificationListenerService.Ranking
 import android.service.notification.NotificationListenerService.RankingMap
@@ -162,7 +163,7 @@ internal object PulseNotifs {
             .put("subText", extras.charSequence(Notification.EXTRA_SUB_TEXT) ?: JSONObject.NULL)
             .put("infoText", extras.charSequence(Notification.EXTRA_INFO_TEXT) ?: JSONObject.NULL)
             .put("inbox", stringArray(extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)))
-            .put("conversationTitle", style(notification)?.conversationTitle?.toString() ?: JSONObject.NULL)
+            .put("conversationTitle", conversationTitle(notification) ?: JSONObject.NULL)
             .put("messages", messages(notification))
             .put("actions", actions(notification))
             .put("image", hasImage(notification))
@@ -205,14 +206,16 @@ internal object PulseNotifs {
         return found
     }
 
-    // EXTRA_STYLE is a private framework string; the public extraction path is this static hook (API 24+).
-    private fun style(notification: Notification): Notification.MessagingStyle? =
-        Notification.MessagingStyle.extractMessagingStyleFromNotification(notification)
+    // The public surface of a conversation notification is the extras bundle: EXTRA_CONVERSATION_TITLE and
+    // EXTRA_MESSAGES (public constants) carry the MessagingStyle payload as Message parcelables. The style
+    // object itself lives behind a private extras key and recoverBuilder needs a Context — neither needed here.
+    private fun conversationTitle(notification: Notification): String? =
+        notification.extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
 
     private fun messages(notification: Notification): JSONArray {
-        val style = style(notification) ?: return JSONArray()
         val out = JSONArray()
-        for (message in style.messages) {
+        for (parcel in notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES, Parcelable::class.java).orEmpty()) {
+            val message = parcel as? Notification.MessagingStyle.Message ?: continue
             @Suppress("DEPRECATION")
             val sender = message.senderPerson?.name?.toString() ?: message.sender?.toString() ?: ""
             out.put(JSONObject().put("sender", sender).put("text", message.text?.toString() ?: "").put("time", message.timestamp))
