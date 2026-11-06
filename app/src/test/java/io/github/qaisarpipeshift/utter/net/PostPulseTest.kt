@@ -35,8 +35,8 @@ class PostPulseTest {
             if (configured) ServerConfig(server.url("/").toString(), KEY) else null
         }
 
-    private fun postedBody(): String {
-        val bytes = server.takeRequest()!!.body?.readByteArray() ?: ByteArray(0)
+    private fun postedBody(request: okhttp3.mockwebserver.RecordedRequest): String {
+        val bytes = request.body?.readByteArray() ?: ByteArray(0)
         return GZIPInputStream(ByteArrayInputStream(bytes)).use { stream -> stream.readBytes().decodeToString() }
     }
 
@@ -53,7 +53,7 @@ class PostPulseTest {
         assertEquals(KEY, request.headers["X-API-Key"])
         assertEquals("gzip", request.headers["Content-Encoding"])
         assertEquals("application/x-ndjson", request.headers["Content-Type"])
-        assertEquals("{\"id\":\"a\"}\n{\"id\":\"b\"}\n", postedBody())
+        assertEquals("{\"id\":\"a\"}\n{\"id\":\"b\"}\n", postedBody(request))
     }
 
     @Test

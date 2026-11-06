@@ -328,7 +328,9 @@ spec:
       http:
         paths:
           - path: /v1/pulse
-            pathType: Prefix
+            # Exact: Prefix would also match /v1/pulse/logs and expose the cluster-internal
+            # pull endpoint on the public host. The phone POSTs exactly /v1/pulse.
+            pathType: Exact
             backend:
               service:
                 name: utter-pulse
