@@ -74,6 +74,33 @@ class PulseStore(
         mutex.withLock { batch.delete() }
     }
 
+    /**
+     * Removes one record too large for the wire (docs/spec.md §18.2): the batch keeps its other records and a
+     * `store_dropped` record goes into the open batch. Returns the dropped bytes, or -1 when the removal failed —
+     * the caller then keeps the batch instead of spinning on a request it can never win. The index counts the same
+     * non-blank lines [readBatch] returns.
+     */
+    suspend fun dropRecord(batch: File, lineIndex: Int): Long = withContext(io) {
+        mutex.withLock {
+            try {
+                val lines = batch.readLines(Charsets.UTF_8).filter { it.isNotBlank() }
+                if (lineIndex !in lines.indices) return@withLock -1L
+                val dropped = lines[lineIndex].toByteArray(Charsets.UTF_8).size.toLong()
+                val kept = lines.filterIndexed { i, _ -> i != lineIndex }
+                val tmp = File(dir, batch.name + ".tmp")
+                tmp.writeText(if (kept.isEmpty()) "" else kept.joinToString(separator = "\n", postfix = "\n"), Charsets.UTF_8)
+                if (!tmp.renameTo(batch)) {
+                    batch.delete()
+                    if (!tmp.renameTo(batch)) return@withLock -1L
+                }
+                appendDroppedRecordLocked(dropped)
+                dropped
+            } catch (_: IOException) {
+                -1L
+            }
+        }
+    }
+
     suspend fun meta(): PulseMeta = withContext(io) {
         mutex.withLock { readMetaLocked() }
     }
@@ -120,12 +147,15 @@ class PulseStore(
             droppedFiles++
         }
         if (droppedFiles == 0) return
-        val record = PulseRecords.storeDropped(ids, files = droppedFiles, bytes = droppedBytes)
+        appendDroppedRecordLocked(droppedBytes, droppedFiles)
+    }
+
+    private fun appendDroppedRecordLocked(bytes: Long, files: Int = 1) {
         try {
             val open = openBatchLocked() ?: newOpenBatchLocked()
-            open.appendText(record.toString() + "\n", Charsets.UTF_8)
+            open.appendText(PulseRecords.storeDropped(ids, files = files, bytes = bytes).toString() + "\n", Charsets.UTF_8)
         } catch (_: IOException) {
-            // The dropped batches are already gone; the record is best-effort like every write here.
+            // The dropped data is already gone; the marker is best-effort like every write here.
         }
     }
 

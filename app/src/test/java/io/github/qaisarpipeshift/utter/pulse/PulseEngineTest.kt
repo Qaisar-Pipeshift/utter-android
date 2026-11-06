@@ -201,6 +201,25 @@ class PulseEngineTest {
     }
 
     @Test
+    fun `a single record over the wire cap is dropped, not retried forever`() = runBlocking {
+        val big = record("big").put("pad", "x".repeat(600 * 1024)) // > the 512 KiB pre-gzip cap alone
+        store.append(listOf(record("a"), big, record("c")))
+        store.closeBatch()
+        server.enqueue(MockResponse().setBody("""{"accepted":1,"duplicates":0}""")) // [a]
+        server.enqueue(MockResponse().setResponseCode(413)) // [big] alone, still too large
+        server.enqueue(MockResponse().setBody("""{"accepted":1,"duplicates":0}""")) // [c]
+
+        engine().onTrigger(PulseEngine.TRIGGER_APP_OPENED)
+
+        assertEquals(3, server.requestCount)
+        assertTrue(closedBatchLines().isEmpty()) // the batch emptied out and was deleted
+        store.closeBatch()
+        val marker = closedBatchLines().single().single()
+        assertTrue(marker.contains("store_dropped"))
+        assertTrue(JSONObject(marker).getLong("bytes") > 512 * 1024)
+    }
+
+    @Test
     fun `a rejected push keeps the batch for the next trigger`() = runBlocking {
         store.append(listOf(record("a")))
         store.closeBatch()

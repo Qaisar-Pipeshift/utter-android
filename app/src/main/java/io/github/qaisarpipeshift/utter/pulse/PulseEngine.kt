@@ -100,10 +100,19 @@ class PulseEngine(
 
                 is PulsePost.TooLarge -> {
                     if (end - index <= 1) {
-                        diag.event("pulse_push_stuck", "${end - index}")
-                        return false
+                        // One record alone exceeds the wire cap (a huge MessagingStyle, say). Dropping it with a
+                        // store_dropped marker beats retrying a request it can never win on every trigger.
+                        val dropped = store.dropRecord(batch, index)
+                        if (dropped < 0L) {
+                            diag.event("pulse_push_stuck", "$index")
+                            return false
+                        }
+                        diag.event("pulse_push_dropped", "$dropped")
+                        index += 1
+                        limit = MAX_PUSH_RECORDS
+                    } else {
+                        limit = (end - index) / 2 // split this range and retry it smaller
                     }
-                    limit = (end - index) / 2 // split this range and retry it smaller
                 }
 
                 is PulsePost.Rejected -> {
