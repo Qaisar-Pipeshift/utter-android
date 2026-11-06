@@ -47,6 +47,9 @@ class PulseEngine(
     private suspend fun onTriggerLocked(trigger: String) {
         val started = clock()
         sampleIfDue(settings())
+        // Background auto-send (docs/spec.md §18.2): a batch open longer than the interval closes here —
+        // triggers are moments the phone is already awake, so this schedules nothing.
+        store.closeStaleBatch(settings().pulseMinIntervalMin * MILLIS_PER_MIN, clock())
         pushIfDue(settings(), trigger, store.meta())
         // No per-trigger event: notifications fire this constantly and would evict the take/HTTP events
         // Diagnostics exists to show (Diag's ring is small). Failures and pushes below are the signal.

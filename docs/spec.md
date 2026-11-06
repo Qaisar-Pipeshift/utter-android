@@ -465,6 +465,7 @@ trigger (cursor only advances after a successful local write).
 | Rule | Value |
 |---|---|
 | Batch | ≤ 512 records / ≤ 512 KiB pre-gzip; unique `id` per record; server dedupes → retries are free |
+| Batch close | auto-close at 256 records · on take/app-open/listener-connect/disconnect triggers · and when the open batch is older than `pulseMinIntervalMin` (background auto-send, evaluated only on triggers — no schedule) |
 | Store cap | 100 MB (≈ 45 MB / 30 days offline est.); overflow drops oldest + writes a `store_dropped` record |
 | Push | `POST /v1/pulse`, `Content-Encoding: gzip`, `application/x-ndjson`, same `X-API-Key` check as `/v2/transcript`; line = `{id, type, device, at, …}`; types `usage_event · usage_daily · net_daily · notif_posted · notif_removed · listener_gap · dnd · store_dropped`; `200 {"accepted":n,"duplicates":m}`; 413 → split and retry |
 
