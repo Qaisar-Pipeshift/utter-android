@@ -179,7 +179,7 @@ class SettingsJsonTest {
     }
 
     @Test
-    fun `a v0.1.4-shaped settings blob decodes with old fields intact and pulse defaults (spec §18.5)`() {
+    fun `a v0-1-4-shaped settings blob decodes with old fields intact and pulse defaults (spec §18-5)`() {
         val old = """{"baseUrl":"https://old.example.test","tapHandsFree":false,"holdThresholdMs":400,
             "theme":"dark","ttsVoice":"nova","onboardingDone":true,"notch":true,
             "historyOn":true,"historyLimit":200,"keepAudioDays":0}"""
@@ -197,7 +197,7 @@ class SettingsJsonTest {
     }
 
     @Test
-    fun `unknown keys never survive an encode-decode roundtrip (spec §18.5)`() {
+    fun `unknown keys never survive an encode-decode roundtrip (spec §18-5)`() {
         val fromFuture = SettingsJson.encode(custom).removeSuffix("}") + ""","futureKey":{"nested":1}}"""
 
         val decoded = SettingsJson.decode(fromFuture)

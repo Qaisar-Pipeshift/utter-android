@@ -94,7 +94,7 @@ class PulseStoreTest {
         val nowClosed = store.closedBatches()
         assertFalse(nowClosed.any { it.name == firstBatch }) // the oldest batch is gone
         val drop = nowClosed.asSequence()
-            .map { store.readBatch(it)!! }
+            .map { runBlocking { store.readBatch(it)!! } }
             .flatten()
             .plus(listOfNotNull(readOpenRecord()))
             .map { JSONObject(it) }

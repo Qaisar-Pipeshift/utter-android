@@ -2,6 +2,7 @@ package io.github.qaisarpipeshift.utter.pulse
 
 import io.github.qaisarpipeshift.utter.core.PulseIds
 import io.github.qaisarpipeshift.utter.core.PulseSample
+import io.github.qaisarpipeshift.utter.core.PulseSampling
 import io.github.qaisarpipeshift.utter.data.PulseStore
 import io.github.qaisarpipeshift.utter.data.PulseMeta
 import io.github.qaisarpipeshift.utter.data.Settings

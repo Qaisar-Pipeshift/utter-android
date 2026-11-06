@@ -196,7 +196,7 @@ class PulseListenerTest {
     }
 
     @Test
-    fun `the listener stays strictly read-only (spec §18.5)`() {
+    fun `the listener stays strictly read-only (spec §18-5)`() {
         // No action methods may be overridden or called: it never cancels, snoozes, ranks or unbinds.
         val actions = listOf(
             "cancelNotification", "cancelNotifications", "snoozeNotification",
