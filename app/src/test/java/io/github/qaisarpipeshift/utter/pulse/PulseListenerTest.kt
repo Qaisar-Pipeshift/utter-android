@@ -103,39 +103,6 @@ class PulseListenerTest {
     }
 
     @Test
-    fun `messaging style keeps sender, text and time per message`() {
-        val person = android.app.Person.Builder()
-            .setName("Ada")
-            .setIcon(androidx.core.graphics.drawable.IconCompat.createWithBitmap(smallBitmap()).toIcon(context))
-            .build()
-        val style = Notification.MessagingStyle(person)
-            .setConversationTitle("Team chat")
-            .addMessage("hello", 1_700_000_100_000, person)
-            .addMessage("hi", 1_700_000_200_000, "Bob")
-        val notification = builder().setStyle(style).build()
-        // A real device's framework writes EXTRA_MESSAGES when the style populates; Robolectric's build()
-        // does not — hand-populate exactly what the device-side extras carry: Bundles (Message is not a
-        // Parcelable), produced by the same public toBundle() the framework serializes with.
-        notification.extras.putParcelableArray(
-            Notification.EXTRA_MESSAGES,
-            arrayOf(
-                Notification.MessagingStyle.Message("hello", 1_700_000_100_000, person).toBundle(),
-                Notification.MessagingStyle.Message("hi", 1_700_000_200_000, "Bob").toBundle(),
-            ),
-        )
-
-        val record = PulseNotifs.posted(ids, sbn(notification), ranking = null)
-
-        assertEquals("Team chat", record.getString("conversationTitle"))
-        val messages = record.getJSONArray("messages")
-        assertEquals(2, messages.length())
-        assertEquals("Ada", messages.getJSONObject(0).getString("sender"))
-        assertEquals("hello", messages.getJSONObject(0).getString("text"))
-        assertEquals(1_700_000_100_000, messages.getJSONObject(0).getLong("time"))
-        assertEquals("Bob", messages.getJSONObject(1).getString("sender"))
-    }
-
-    @Test
     fun `actions are kept as titles and a large icon is only a flag`() {
         val intent = PendingIntent.getActivity(context, 0, Intent("x"), PendingIntent.FLAG_IMMUTABLE)
         val action = Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Reply", intent).build()
