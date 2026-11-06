@@ -85,6 +85,10 @@ object SettingsJson {
         put("ttsVoice", settings.ttsVoice)
         put("onboardingDone", settings.onboardingDone)
         put("prewarm", settings.prewarm)
+        put("pulseEnabled", settings.pulseEnabled)
+        put("pulseMinIntervalMin", settings.pulseMinIntervalMin)
+        put("pulseWifiOnly", settings.pulseWifiOnly)
+        put("pulseStoreCapMb", settings.pulseStoreCapMb)
     }.toString()
 
     fun decode(json: String?): Settings {
@@ -136,6 +140,10 @@ object SettingsJson {
             ttsVoice = root.string("ttsVoice", "aiden"),
             onboardingDone = root.bool("onboardingDone", false),
             prewarm = root.bool("prewarm", true),
+            pulseEnabled = root.bool("pulseEnabled", true),
+            pulseMinIntervalMin = root.int("pulseMinIntervalMin", 15).coerceIn(1, 1440),
+            pulseWifiOnly = root.bool("pulseWifiOnly", false),
+            pulseStoreCapMb = root.int("pulseStoreCapMb", 100).coerceIn(1, 1024),
         )
     }
 
