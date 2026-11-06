@@ -41,6 +41,10 @@ class PulseIds(
  * nothing is filtered, only the naming falls back.
  */
 object PulseEventNames {
+
+    /** Standby-bucket events are the one type whose payload the sampler must recognise; int per the map above. */
+    const val STANDBY_BUCKET_CHANGED = 11
+
     val NAMES: Map<Int, String> = mapOf(
         1 to "ACTIVITY_RESUMED",
         2 to "ACTIVITY_PAUSED",
@@ -155,6 +159,19 @@ object PulseRecords {
 
     private fun JSONObject.putIfPositive(key: String, value: Int): JSONObject =
         if (value > 0) put(key, value) else this
+}
+
+/**
+ * Closed calendar days still to backfill, as epoch days: `(lastDay, today)` clamped to a small window — Android
+ * prunes its daily usage files after roughly ten days (docs/spec.md §18.1), so older days cannot be queried anyway.
+ */
+object PulseWindows {
+    const val MAX_BACK_DAYS = 10L
+
+    fun closedDays(lastDay: Long, todayEpochDay: Long, maxBackDays: Long = MAX_BACK_DAYS): LongRange {
+        val from = maxOf(lastDay + 1, todayEpochDay - maxBackDays)
+        return if (from >= todayEpochDay) LongRange.EMPTY else from until todayEpochDay
+    }
 }
 
 /** One sampling pass: the records to append plus the per-source cursors valid only after they are written. */

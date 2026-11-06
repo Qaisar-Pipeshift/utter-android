@@ -131,6 +131,25 @@ class PulseRecordsTest {
     }
 
     @Test
+    fun `closed days start after the last emitted day and never include today`() {
+        assertEquals(20_001L until 20_005L, PulseWindows.closedDays(lastDay = 20_000, todayEpochDay = 20_005))
+    }
+
+    @Test
+    fun `an unset daily cursor falls back to the ten-day prune window`() {
+        assertEquals(19_995L until 20_005L, PulseWindows.closedDays(lastDay = 0, todayEpochDay = 20_005))
+
+        val shortWindow = PulseWindows.closedDays(lastDay = 19_000, todayEpochDay = 20_005)
+        assertEquals(19_995L, shortWindow.first) // older days are pruned by Android anyway
+    }
+
+    @Test
+    fun `nothing to backfill when the last day is today`() {
+        assertTrue(PulseWindows.closedDays(lastDay = 20_004, todayEpochDay = 20_005).isEmpty())
+        assertTrue(PulseWindows.closedDays(lastDay = 20_005, todayEpochDay = 20_005).isEmpty())
+    }
+
+    @Test
     fun `record json never contains anything but the documented keys`() {
         val record = PulseRecords.usageEvent(ids, at = 5L, eventType = 1, pkg = "com.example", className = "Main", bucket = 0)
         assertEquals(
