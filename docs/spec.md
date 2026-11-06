@@ -482,7 +482,17 @@ append valid lines to `pulse-YYYYMMDD.ndjson` (id-deduped in memory, seeded from
 | `PACKAGE_USAGE_STATS` (`tools:ignore=ProtectedPermissions`), `QUERY_ALL_PACKAGES` (app labels for insights) | `check_manifest.sh` + `check_merged_manifest.py` allowlists |
 | Settings: `pulseEnabled=true`, `pulseMinIntervalMin=15`, `pulseWifiOnly=false`, `pulseStoreCapMb=100` | JSON-only; no UI anywhere |
 
-### 18.5 Device checks (extend §12)
+### 18.5 Update / rollback compatibility (decided 2026-11-06)
+
+| Rule | Detail |
+|---|---|
+| Settings JSON both-ways safe | New `pulse*` keys default when absent (existing opt-with-fallback parser, verified); v0.1.4 ignores unknown keys → import/export/backup round-trips between versions without loss |
+| No migrations, no renames | Existing DataStore file, keys, SecretStore/HistoryStore/PendingStore/StatsStore/ledger schemas untouched; Pulse adds only new files (`pulse/` dir) |
+| Grants survive downgrade + re-update | Notification-listener grant is keyed by component (stale grant on 0.1.4 is inert, rebinds on re-update); usage appop persists; same signing key throughout |
+| Rollback method | `adb install -r -d utter-<old>.apk` keeps app data (Obtainium cannot downgrade); orphan pulse files on 0.1.4 are inert |
+| Proof | Unit test: v0.1.4-shaped settings JSON fixture decodes with old fields intact + pulse defaults; new encode → decode roundtrip. Device check D19: downgrade → re-upgrade, settings + grants intact |
+
+### 18.6 Device checks (extend §12)
 
 D14 grant both accesses on the OnePlus (incl. ⋮ "Allow restricted settings" for the sideloaded APK) · D15 notifications + usage arrive at the server, then survive 24 h offline → full backfill on reconnect · D16 24 h battery delta with Pulse on (expect « 1 %; recorded, not gated) · D17 reboot → `listener_gap` + snapshot, no duplicates · D18 Samsung grant path identical.
 

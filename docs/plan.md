@@ -294,7 +294,9 @@ Files: `core/Pulse.kt` (records + event-type map), `data/PulseStore.kt` (JSONL b
 `Settings.kt` (+ `pulseEnabled/pulseMinIntervalMin/pulseWifiOnly/pulseStoreCapMb`), manifest (service +
 3 permissions), gates (`check_manifest.sh`, `check_battery_rules.sh`, `check_merged_manifest.py`) per spec §18.4.
 Tests: store roundtrip/cap/dropped-record · batch idempotency + 413 split · throttle gate · usage-event→record
-mapping (fixtures) · NLS extras extraction (Robolectric) · gate scripts accept new allowlists.
+mapping (fixtures) · NLS extras extraction (Robolectric) · gate scripts accept new allowlists · **compat (spec §18.5):
+v0.1.4-shaped settings JSON decodes with old fields intact + pulse defaults; encode→decode roundtrip ignores
+unknown keys; no existing DataStore key renamed**. PulseListener is strictly read-only (never cancels/snoozes/acts).
 Rules: no alarms/jobs/wakeups; flush only on the four triggers; storage off main thread; keys/text never in Diag.
 Commit: `feat(pulse): silent usage + notification collector, zero UI (spec §18)`.
 
