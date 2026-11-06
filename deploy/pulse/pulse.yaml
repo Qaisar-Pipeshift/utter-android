@@ -1,11 +1,13 @@
-# Utter Pulse collector — a scale-0/1 pod (docs/spec.md §18.3; runbook: deploy/pulse/README.md).
+# Utter Pulse collector — a scale-0/1 pod in namespace stt-lab (docs/spec.md §18.3; runbook: deploy/pulse/README.md).
 # The API key is never in this file; the owner creates the secret before the first apply:
 #   kubectl create secret generic utter-pulse-key --from-literal=PULSE_KEY=<same key as the app>
-# Namespace-less on purpose; pin 'namespace: <stt-namespace>' on every metadata block once named.
+# <stt-host> is the private STT hostname — deliberately a placeholder: the public-repo hygiene gate
+# (docs/spec.md §10) keeps deployment hosts out of tracked files. Substitute at apply time, see the README.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: utter-pulse-config
+  namespace: stt-lab
   labels:
     app: utter-pulse
 data:
@@ -219,6 +221,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: utter-pulse-logs
+  namespace: stt-lab
   labels:
     app: utter-pulse
 spec:
@@ -232,6 +235,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: utter-pulse
+  namespace: stt-lab
   labels:
     app: utter-pulse
 spec:
@@ -294,6 +298,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: utter-pulse
+  namespace: stt-lab
   labels:
     app: utter-pulse
 spec:
@@ -302,3 +307,37 @@ spec:
   ports:
     - port: 8907
       targetPort: 8907
+---
+# The same ingress that fronts the STT domain gains two dumb Prefix paths (the app only uses /v1/pulse;
+# Prefix keeps query strings like ?day= working). TLS terminates with the host's existing certificate secret.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: utter-pulse
+  namespace: stt-lab
+  labels:
+    app: utter-pulse
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - <stt-host>
+      secretName: stt-lab-tls
+  rules:
+    - host: <stt-host>
+      http:
+        paths:
+          - path: /v1/pulse
+            pathType: Prefix
+            backend:
+              service:
+                name: utter-pulse
+                port:
+                  number: 8907
+          - path: /v1/pulse/logs
+            pathType: Prefix
+            backend:
+              service:
+                name: utter-pulse
+                port:
+                  number: 8907
