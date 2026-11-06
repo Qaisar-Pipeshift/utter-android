@@ -131,8 +131,8 @@ class PulseSampler(
             val wifi = querySummary(nsm, ConnectivityManager.TYPE_WIFI, start, end) ?: return out to done
             val mobile = querySummary(nsm, ConnectivityManager.TYPE_MOBILE, start, end) ?: return out to done
             val totals = HashMap<Int, LongArray>()
-            for ((index, stats) in listOf(wifi to 0, mobile to 2)) {
-                stats.use {
+            for ((stats, index) in listOf(wifi to 0, mobile to 2)) {
+                try {
                     val bucket = NetworkStats.Bucket()
                     while (stats.hasNextBucket()) {
                         if (!stats.getNextBucket(bucket)) break
@@ -140,6 +140,8 @@ class PulseSampler(
                         per[index] += bucket.txBytes
                         per[index + 1] += bucket.rxBytes
                     }
+                } finally {
+                    stats.close()
                 }
             }
             for ((uid, bytes) in totals) {

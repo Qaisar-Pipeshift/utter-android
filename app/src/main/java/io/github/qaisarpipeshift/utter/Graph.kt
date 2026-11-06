@@ -1,14 +1,22 @@
 package io.github.qaisarpipeshift.utter
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.TrafficStats
+import android.os.Build
 import android.os.Process
+import android.provider.Settings
 import io.github.qaisarpipeshift.utter.audio.PcmPlayer
 import io.github.qaisarpipeshift.utter.core.Cleaner
+import io.github.qaisarpipeshift.utter.core.PulseIds
+import io.github.qaisarpipeshift.utter.core.PulseSample
+import io.github.qaisarpipeshift.utter.core.PulseSampling
 import io.github.qaisarpipeshift.utter.core.ResourceReading
 import io.github.qaisarpipeshift.utter.core.TakeRetrier
 import io.github.qaisarpipeshift.utter.data.HistoryStore
 import io.github.qaisarpipeshift.utter.data.PendingStore
+import io.github.qaisarpipeshift.utter.data.PulseStore
 import io.github.qaisarpipeshift.utter.data.ResourceLedger
 import io.github.qaisarpipeshift.utter.data.SecretStore
 import io.github.qaisarpipeshift.utter.data.SettingsRepo
@@ -18,6 +26,10 @@ import io.github.qaisarpipeshift.utter.net.Api
 import io.github.qaisarpipeshift.utter.net.CleanResult
 import io.github.qaisarpipeshift.utter.net.Http
 import io.github.qaisarpipeshift.utter.net.ServerConfig
+import io.github.qaisarpipeshift.utter.pulse.PulseEngine
+import io.github.qaisarpipeshift.utter.pulse.PulseSampler
+import java.io.File
+import java.util.UUID
 
 /**
  * Manual dependency graph shared by the IME and the settings app (docs/plan.md §1).
@@ -109,6 +121,52 @@ class Graph(app: Context) {
 
     /** Shared playback for kept history audio; one track at a time, released when playback stops. */
     val pcmPlayer: PcmPlayer by lazy { PcmPlayer() }
+
+    /** The device tag on every Pulse record; `ANDROID_ID` is stable per signing key and needs no permission. */
+    val pulseIds: PulseIds by lazy {
+        PulseIds(
+            device = Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
+                ?.takeUnless { it.isBlank() }
+                ?: "unknown",
+            newId = { UUID.randomUUID().toString() },
+            clock = System::currentTimeMillis,
+        )
+    }
+
+    /** Pulse's local batches in `filesDir/pulse/` (docs/spec.md §18.2); the cap follows the JSON-only setting. */
+    val pulseStore: PulseStore by lazy {
+        PulseStore(File(appContext.filesDir, "pulse"), pulseIds, capBytes = {
+            settings.current().pulseStoreCapMb.toLong() * PulseStore.BYTES_PER_MB
+        })
+    }
+
+    /**
+     * The silent usage + notification collector (docs/spec.md §18): no UI anywhere, controlled by JSON settings,
+     * inert below Android 15 — the engine's own guard is why the sampler is a no-op here rather than a second guard.
+     */
+    val pulse: PulseEngine by lazy {
+        PulseEngine(
+            store = pulseStore,
+            sampler = if (Build.VERSION.SDK_INT >= 35) {
+                PulseSampler(appContext, pulseStore, pulseIds)
+            } else {
+                PulseSampling { PulseSample(emptyList(), 0, 0, 0) }
+            },
+            api = api,
+            settings = settings::current,
+            unmetered = ::pulseUnmetered,
+            diag = diag,
+        )
+    }
+
+    /** One capability read per push attempt, like the IME's `isOnline` — never a network callback (spec §10). */
+    private fun pulseUnmetered(): Boolean = try {
+        val manager = appContext.getSystemService(ConnectivityManager::class.java)
+        val capabilities = manager?.getNetworkCapabilities(manager.activeNetwork)
+        capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
+    } catch (_: Exception) {
+        false
+    }
 
     /** Process CPU time; a platform failure must cost a counter, not the keyboard. */
     private fun cpuTimeMs(): Long = try {

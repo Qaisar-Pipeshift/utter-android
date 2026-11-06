@@ -47,6 +47,7 @@ import io.github.qaisarpipeshift.utter.core.TakeRequest
 import io.github.qaisarpipeshift.utter.data.Settings
 import io.github.qaisarpipeshift.utter.data.ThemeMode
 import io.github.qaisarpipeshift.utter.notify.LiveStatus
+import io.github.qaisarpipeshift.utter.pulse.PulseEngine
 import io.github.qaisarpipeshift.utter.ui.theme.UtterTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -145,7 +146,11 @@ class UtterIme :
             // The switch to the previous keyboard runs only after the take's bookkeeping has finished.
             onInsertDone = ::onInserted,
             prewarm = { graph.api.warm() },
-            onTakeEnd = graph.ledger::takeEnded,
+            onTakeEnd = { micMs, live ->
+                graph.ledger.takeEnded(micMs, live)
+                // A finished take is one of Pulse's four flush triggers (docs/spec.md §18.2); the engine throttles.
+                imeScope.launch { graph.pulse.onTrigger(PulseEngine.TRIGGER_TAKE_FINISHED) }
+            },
         )
 
         liveStatus = LiveStatus(this, { graph.settings.current() }, imeScope)
