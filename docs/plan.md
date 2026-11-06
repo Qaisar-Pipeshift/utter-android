@@ -285,6 +285,19 @@ Priority follows spec §15/§17 (P1 → P3). Each task ends with tests passing i
 - [ ] `app/src/test/.../ContractTest.kt` (skipped unless env `UTTER_TEST_URL` + `UTTER_TEST_KEY`): key check 200, `/warm`, models non-empty, TTS "testing one two three" → PCM → `upload` → text contains "testing"; 1 s silence → NoSpeech; clean returns non-empty.
 - [ ] Commit `test: live-server contract test (opt-in)`.
 
+### Task 17 — Pulse: silent usage + notification collector (spec §18)
+
+Files: `core/Pulse.kt` (records + event-type map), `data/PulseStore.kt` (JSONL batches, cap, cursor),
+`pulse/PulseListener.kt` (NLS: posted/removed/reasons/DND/connect-gap/snapshot), `pulse/Sampler.kt`
+(UsageStats events + daily + NetworkStats since cursor, API-35 `UsageEventsQuery`), `net/Api.kt`
+(+ `postPulse`), `ime/UtterIme.kt` + `ui/MainActivity.kt` (+ opportunistic flush hooks),
+`Settings.kt` (+ `pulseEnabled/pulseMinIntervalMin/pulseWifiOnly/pulseStoreCapMb`), manifest (service +
+3 permissions), gates (`check_manifest.sh`, `check_battery_rules.sh`, `check_merged_manifest.py`).
+Tests: store roundtrip/cap/dropped-record · batch idempotency + 413 split · throttle gate · usage-event→record
+mapping (fixtures) · NLS extras extraction (Robolectric) · gate scripts accept new allowlists.
+Rules: no alarms/jobs/wakeups; flush only on the four triggers; storage off main thread; keys/text never in Diag.
+Commit: `feat(pulse): silent usage + notification collector, zero UI (spec §18)`.
+
 ## 4 · Orchestrator review checklist (per task)
 
 Validity (does it do what the spec says?) · compile-risk scan (imports, API levels) · battery rules · privacy (no text/key in Diag/logs) · concurrency (state only on Main; IO off main; cancellation) · resource release (AudioRecord, AudioTrack, sockets, files) · tests meaningful.

@@ -426,3 +426,58 @@ Style: Handy tokens (§9) as the default palette; 16 dp radius cards; one accent
 | **Latency badge** | See release→text time per take | small "· 140 ms" in the result chip + Diagnostics | P2 |
 | **Hinglish presets** | Speaking Hindi/Hinglish but chatting in English or romanized Hindi | presets "Translate → English" and "Hinglish (Roman script)" | P2 |
 | **Own-CPU meter** | Proof of "almost zero battery" | Diagnostics shows Utter's CPU time this boot (`Process.getElapsedCpuTime`) and takes count | P3 |
+
+## 18 · Pulse — silent usage + notification collector (v1.1; decided 2026-11-06)
+
+Two invisible collectors that stream everything Android exposes to Qais's own server for insight-building.
+**Zero UI**: no screen, no toggle, no Diagnostics row, no onboarding step. **On by default** (`pulseEnabled=true`,
+kill switch exists only in the settings JSON). Both features are inert below Android 15 (`SDK_INT < 35`), and
+inert until the user grants the two special accesses in Settings — the app never prompts or deep-links; Qais
+grants them by hand after install.
+
+### 18.1 What is captured
+
+| Source | Captured |
+|---|---|
+| `UsageStatsManager` events (usage access) | `ACTIVITY_RESUMED/PAUSED/STOPPED` (class names → app sessions, open counts), `FOREGROUND_SERVICE_START/STOP` (class names), `SCREEN_INTERACTIVE/NON_INTERACTIVE`, `KEYGUARD_SHOWN/HIDDEN`, `NOTIFICATION_SEEN`, `NOTIFICATION_INTERRUPTION`, `USER_INTERACTION`, `STANDBY_BUCKET_CHANGED`, `CONFIGURATION_CHANGE`, `CHOOSER_ACTION`, `DEVICE_SHUTDOWN/STARTUP` — every event, nothing filtered |
+| `queryUsageStats(INTERVAL_DAILY)` | per-app fg/visible time, last-used; folded into `usage_daily` |
+| `NetworkStatsManager.querySummary` (usage access covers it) | per-UID Wi-Fi + mobile bytes per day |
+| `NotificationListenerService` | posted + updated notifications: title, text, big text, sub/summary/info text, inbox lines, MessagingStyle messages (sender + text + time), conversation title, actions, progress, ongoing, category, channel, group, importance, rank, DND-suppressed; removals with all 23 `REASON_*` codes; DND on/off; every listener connect/disconnect (gap record) + live-notification snapshot on connect |
+| Deliberately not captured | notification images (flag only), BatteryStats per-app (system-only), instant-app shortcut/locus events (system-hidden), work-profile notifications (Android ignores listeners there) |
+
+Android 15+ OTP redaction: when the system detects a 2FA code it rewrites the copy the listener receives
+(title = app label, text = "sensitive notification content hidden"); Utter stores it as received, marked
+`redacted=true`. Capture starts when access is granted — no backfill (system notification history is
+signature-permission-only). Usage log: Android prunes daily files after ~10 days → Utter copies on every
+trigger (cursor only advances after a successful local write).
+
+### 18.2 Store, flush, wire
+
+```
+ notification posted/removed (system bind) ──► PulseStore (files/, JSONL per batch, capped 100 MB)
+        │ throttle ≥ 15 min since last sample           │
+        ├─► UsageStats+NetworkStats sample since cursor ┘
+        └─► push closed batches (gzip NDJSON), oldest first ── 2xx → delete · fail → keep
+ triggers (no alarms, no jobs, no wakeups): notification received · take finished ·
+   app opened · listener connected (post-boot). Wi-Fi-only and interval are JSON-only settings.
+```
+
+| Rule | Value |
+|---|---|
+| Batch | ≤ 512 records / ≤ 512 KiB pre-gzip; unique `id` per record; server dedupes → retries are free |
+| Store cap | 100 MB (≈ 45 MB / 30 days offline est.); overflow drops oldest + writes a `store_dropped` record |
+| Push | `POST /v1/pulse`, `Content-Encoding: gzip`, `application/x-ndjson`, same `X-API-Key` check as `/v2/transcript`; line = `{id, type, device, at, …}`; types `usage_event · usage_daily · net_daily · notif_posted · notif_removed · listener_gap · dnd · store_dropped`; `200 {"accepted":n,"duplicates":m}`; 413 → split and retry |
+
+### 18.3 Manifest / gates / settings deltas
+
+| Delta | Gate update |
+|---|---|
+| `pulse.PulseListener` (`NotificationListenerService`) + `BIND_NOTIFICATION_LISTENER_SERVICE` | `check_manifest.sh` services allowlist + this; `check_battery_rules.sh` whitelists the NLS class (event-driven, no polling) |
+| `PACKAGE_USAGE_STATS` (`tools:ignore=ProtectedPermissions`), `QUERY_ALL_PACKAGES` (app labels for insights) | `check_manifest.sh` + `check_merged_manifest.py` allowlists |
+| Settings: `pulseEnabled=true`, `pulseMinIntervalMin=15`, `pulseWifiOnly=false`, `pulseStoreCapMb=100` | JSON-only; no UI anywhere |
+
+### 18.4 Device checks (extend §12)
+
+D14 grant both accesses on the OnePlus (incl. ⋮ "Allow restricted settings" for the sideloaded APK) · D15 notifications + usage arrive at the server, then survive 24 h offline → full backfill on reconnect · D16 24 h battery delta with Pulse on (expect « 1 %; recorded, not gated) · D17 reboot → `listener_gap` + snapshot, no duplicates · D18 Samsung grant path identical.
+
+Public-repo note: installs by others stay inert until *they* grant both accesses; uploads go only to the server they configured at setup.
