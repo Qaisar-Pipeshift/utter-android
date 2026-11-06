@@ -47,6 +47,9 @@ class PulseEngine(
     private suspend fun onTriggerLocked(trigger: String) {
         val started = clock()
         sampleIfDue(settings())
+        // Background auto-send (docs/spec.md §18.2): a batch open longer than the interval closes here —
+        // triggers are moments the phone is already awake, so this schedules nothing.
+        store.closeStaleBatch(settings().pulseMinIntervalMin * MILLIS_PER_MIN, clock())
         pushIfDue(settings(), trigger, store.meta())
         // No per-trigger event: notifications fire this constantly and would evict the take/HTTP events
         // Diagnostics exists to show (Diag's ring is small). Failures and pushes below are the signal.
@@ -61,17 +64,19 @@ class PulseEngine(
         } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
             diag.event("pulse_sample_failed", failure.javaClass.simpleName)
-            store.saveMeta(meta.copy(lastSampleAt = clock()))
+            store.saveMeta(store.meta().copy(lastSampleAt = clock()))
             return
         }
-        // The cursors move only after the records are durably on disk (docs/spec.md §18.1).
+        // The cursors move only after the records are durably on disk (docs/spec.md §18.1). The save merges
+        // onto a fresh read: append stamped openSince, and saving the pre-append snapshot would clobber it.
         val written = store.append(sample.records)
         store.saveMeta(
-            if (written) {
-                meta.copy(lastSampleAt = clock(), usageCursor = sample.usageCursor, dailyDay = sample.dailyDay, netDay = sample.netDay)
-            } else {
-                meta.copy(lastSampleAt = clock())
-            },
+            store.meta().copy(
+                lastSampleAt = clock(),
+                usageCursor = if (written) sample.usageCursor else store.meta().usageCursor,
+                dailyDay = if (written) sample.dailyDay else store.meta().dailyDay,
+                netDay = if (written) sample.netDay else store.meta().netDay,
+            ),
         )
         diag.event("pulse_sample", "${sample.records.size}")
     }
@@ -85,7 +90,7 @@ class PulseEngine(
         if (meta.lastPushAt > 0 && clock() - meta.lastPushAt < current.pulseMinIntervalMin * MILLIS_PER_MIN) return
         for (batch in store.closedBatches()) {
             if (!pushBatch(batch)) {
-                store.saveMeta(meta.copy(lastPushAt = clock()))
+                store.saveMeta(store.meta().copy(lastPushAt = clock()))
                 return // oldest first: retry the rest on the next trigger
             }
         }

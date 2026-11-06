@@ -49,7 +49,7 @@ class PulseEngineTest {
     fun setUp() {
         server = MockWebServer()
         server.start()
-        store = PulseStore(folder.newFolder("pulse"), ids())
+        store = PulseStore(folder.newFolder("pulse"), ids(), clock = { now })
     }
 
     @After
@@ -142,7 +142,19 @@ class PulseEngineTest {
 
         engine(sampler(sample.records, 999L, 20_000, 20_001)).onTrigger(PulseEngine.TRIGGER_NOTIFICATION)
 
-        assertEquals(PulseMeta(999L, 20_000, 20_001, now), store.meta())
+        assertEquals(PulseMeta(999L, 20_000, 20_001, now, 0, now), store.meta())
+    }
+
+    @Test
+    fun `an open batch older than the interval auto-sends on the next trigger`() = runBlocking {
+        store.append(listOf(record("n1")))
+        now += 15 * 60_000 + 1 // batch now older than the interval
+        server.enqueue(MockResponse().setBody("""{"accepted":1,"duplicates":0}"""))
+
+        engine().onTrigger(PulseEngine.TRIGGER_NOTIFICATION) // notification triggers never close young batches…
+
+        assertEquals(1, server.requestCount)
+        assertTrue(closedBatchLines().isEmpty()) // …but an aging one closed and pushed here
     }
 
     @Test

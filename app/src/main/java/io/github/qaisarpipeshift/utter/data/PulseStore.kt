@@ -19,6 +19,9 @@ data class PulseMeta(
     val netDay: Long = 0,
     val lastSampleAt: Long = 0,
     val lastPushAt: Long = 0,
+
+    /** When the currently open batch first received a record; 0 = no open batch. Background auto-send (§18.2). */
+    val openSince: Long = 0,
 )
 
 /**
@@ -35,6 +38,7 @@ class PulseStore(
     private val ids: PulseIds,
     private val capBytes: () -> Long = { DEFAULT_CAP_MB * BYTES_PER_MB },
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val mutex = Mutex()
 
@@ -47,9 +51,23 @@ class PulseStore(
     /** Seals the open batch so the next push can send it; an empty open batch is deleted. */
     suspend fun closeBatch() = withContext(io) {
         mutex.withLock {
-            val open = openBatchLocked()
-            if (open != null) {
-                if (open.length() == 0L) open.delete() else open.renameTo(closedNameOf(open))
+            closeBatchLocked()
+        }
+    }
+
+    /**
+     * Background auto-send (docs/spec.md §18.2): closes the open batch when it has been open for [maxAgeMs]
+     * since its first record. Called on triggers — moments the phone is awake anyway — never on a schedule.
+     * True when a batch was closed (the caller then pushes).
+     */
+    suspend fun closeStaleBatch(maxAgeMs: Long, nowMs: Long): Boolean = withContext(io) {
+        mutex.withLock {
+            val meta = readMetaLocked()
+            if (meta.openSince in 1..(nowMs - maxAgeMs)) {
+                closeBatchLocked()
+                true
+            } else {
+                false
             }
         }
     }
@@ -112,19 +130,22 @@ class PulseStore(
     }
 
     suspend fun saveMeta(meta: PulseMeta) = withContext(io) {
-        mutex.withLock {
-            try {
-                if (!dir.exists()) dir.mkdirs()
-                atomicWrite(File(dir, META_FILE), JSONObject()
-                    .put("usageCursor", meta.usageCursor)
-                    .put("dailyDay", meta.dailyDay)
-                    .put("netDay", meta.netDay)
-                    .put("lastSampleAt", meta.lastSampleAt)
-                    .put("lastPushAt", meta.lastPushAt)
-                    .toString())
-            } catch (_: IOException) {
-                // Lost cursors only re-sample what Android still keeps; never fatal.
-            }
+        mutex.withLock { saveMetaLocked(meta) }
+    }
+
+    private fun saveMetaLocked(meta: PulseMeta) {
+        try {
+            if (!dir.exists()) dir.mkdirs()
+            atomicWrite(File(dir, META_FILE), JSONObject()
+                .put("usageCursor", meta.usageCursor)
+                .put("dailyDay", meta.dailyDay)
+                .put("netDay", meta.netDay)
+                .put("lastSampleAt", meta.lastSampleAt)
+                .put("lastPushAt", meta.lastPushAt)
+                .put("openSince", meta.openSince)
+                .toString())
+        } catch (_: IOException) {
+            // Lost cursors only re-sample what Android still keeps; never fatal.
         }
     }
 
@@ -147,10 +168,32 @@ class PulseStore(
             open.appendText(head.joinToString(separator = "\n", postfix = "\n") { it.toString() }, Charsets.UTF_8)
             if (lineCountLocked(open) >= BATCH_RECORDS) open.renameTo(closedNameOf(open))
         }
+        stampOpenSinceLocked(records.isNotEmpty())
         enforceCapLocked()
         true
     } catch (_: IOException) {
         false
+    }
+
+    /** Marks when the open batch received its first record (0 once closed), so age-based auto-send works. */
+    private fun stampOpenSinceLocked(wrote: Boolean) {
+        val meta = readMetaLocked()
+        val openSince = when {
+            openBatchLocked() == null -> 0L
+            meta.openSince != 0L -> meta.openSince
+            wrote -> clock()
+            else -> 0L
+        }
+        if (openSince != meta.openSince) saveMetaLocked(meta.copy(openSince = openSince))
+    }
+
+    private fun closeBatchLocked() {
+        val open = openBatchLocked()
+        if (open != null) {
+            if (open.length() == 0L) open.delete() else open.renameTo(closedNameOf(open))
+        }
+        val meta = readMetaLocked()
+        if (meta.openSince != 0L) saveMetaLocked(meta.copy(openSince = 0L))
     }
 
     /** Appends the missing newline when the open batch does not end with one (a torn last line). */
@@ -249,6 +292,7 @@ class PulseStore(
             netDay = root.optLong("netDay", 0),
             lastSampleAt = root.optLong("lastSampleAt", 0),
             lastPushAt = root.optLong("lastPushAt", 0),
+            openSince = root.optLong("openSince", 0),
         )
     }
 
