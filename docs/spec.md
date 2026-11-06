@@ -468,7 +468,13 @@ trigger (cursor only advances after a successful local write).
 | Store cap | 100 MB (≈ 45 MB / 30 days offline est.); overflow drops oldest + writes a `store_dropped` record |
 | Push | `POST /v1/pulse`, `Content-Encoding: gzip`, `application/x-ndjson`, same `X-API-Key` check as `/v2/transcript`; line = `{id, type, device, at, …}`; types `usage_event · usage_daily · net_daily · notif_posted · notif_removed · listener_gap · dnd · store_dropped`; `200 {"accepted":n,"duplicates":m}`; 413 → split and retry |
 
-### 18.3 Manifest / gates / settings deltas
+### 18.3 Reference collector (server side; Qais runs it on demand)
+
+`server/pulse_server.py` — stdlib-only Python, no DB: `POST /v1/pulse` + `X-API-Key` (env) → gunzip →
+append valid lines to `pulse-YYYYMMDD.ndjson` (id-deduped in memory, seeded from existing logs) →
+`{"accepted":n,"duplicates":m}`. Run whenever wanted; the phone never needs it up (502 ⇒ queue ⇒ backfill).
+
+### 18.4 Manifest / gates / settings deltas
 
 | Delta | Gate update |
 |---|---|
@@ -476,7 +482,7 @@ trigger (cursor only advances after a successful local write).
 | `PACKAGE_USAGE_STATS` (`tools:ignore=ProtectedPermissions`), `QUERY_ALL_PACKAGES` (app labels for insights) | `check_manifest.sh` + `check_merged_manifest.py` allowlists |
 | Settings: `pulseEnabled=true`, `pulseMinIntervalMin=15`, `pulseWifiOnly=false`, `pulseStoreCapMb=100` | JSON-only; no UI anywhere |
 
-### 18.4 Device checks (extend §12)
+### 18.5 Device checks (extend §12)
 
 D14 grant both accesses on the OnePlus (incl. ⋮ "Allow restricted settings" for the sideloaded APK) · D15 notifications + usage arrive at the server, then survive 24 h offline → full backfill on reconnect · D16 24 h battery delta with Pulse on (expect « 1 %; recorded, not gated) · D17 reboot → `listener_gap` + snapshot, no duplicates · D18 Samsung grant path identical.
 

@@ -292,7 +292,7 @@ Files: `core/Pulse.kt` (records + event-type map), `data/PulseStore.kt` (JSONL b
 (UsageStats events + daily + NetworkStats since cursor, API-35 `UsageEventsQuery`), `net/Api.kt`
 (+ `postPulse`), `ime/UtterIme.kt` + `ui/MainActivity.kt` (+ opportunistic flush hooks),
 `Settings.kt` (+ `pulseEnabled/pulseMinIntervalMin/pulseWifiOnly/pulseStoreCapMb`), manifest (service +
-3 permissions), gates (`check_manifest.sh`, `check_battery_rules.sh`, `check_merged_manifest.py`).
+3 permissions), gates (`check_manifest.sh`, `check_battery_rules.sh`, `check_merged_manifest.py`) per spec §18.4.
 Tests: store roundtrip/cap/dropped-record · batch idempotency + 413 split · throttle gate · usage-event→record
 mapping (fixtures) · NLS extras extraction (Robolectric) · gate scripts accept new allowlists.
 Rules: no alarms/jobs/wakeups; flush only on the four triggers; storage off main thread; keys/text never in Diag.
