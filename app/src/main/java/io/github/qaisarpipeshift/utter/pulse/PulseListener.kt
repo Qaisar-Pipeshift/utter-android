@@ -171,7 +171,11 @@ internal object PulseNotifs {
         if (ranking != null) {
             record.put("importance", ranking.importance)
             record.put("rank", ranking.rank)
-            record.put("dndSuppressed", ranking.isSuppressedByDND)
+            // Suppressed visual effects is the real public signal for DND suppression on a Ranking
+            // (there is no isSuppressedByDND); the raw flags go out alongside a derived boolean.
+            val suppressed = ranking.suppressedVisualEffects
+            record.put("suppressedEffects", suppressed)
+            record.put("dndSuppressed", suppressed != 0)
         }
         return record
     }
@@ -201,8 +205,9 @@ internal object PulseNotifs {
         return found
     }
 
+    // EXTRA_STYLE is a private framework string; the public extraction path is this static hook (API 24+).
     private fun style(notification: Notification): Notification.MessagingStyle? =
-        notification.extras.getParcelable(Notification.EXTRA_STYLE, Notification.MessagingStyle::class.java)
+        Notification.MessagingStyle.extractMessagingStyleFromNotification(notification)
 
     private fun messages(notification: Notification): JSONArray {
         val style = style(notification) ?: return JSONArray()
