@@ -27,9 +27,8 @@ ALLOWED_PERMISSIONS = {
     # androidx.core declares this signature permission in every app for ContextCompat.registerReceiver; inert while
     # no code registers a receiver (Utter registers none).
     "io.github.qaisarpipeshift.utter.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
-    # Pulse collectors (docs/spec.md §18.4): the app's own special accesses, granted by hand in Settings.
+    # Pulse collector (docs/spec.md §18.4): the app's own special access, granted by hand in Settings.
     "android.permission.PACKAGE_USAGE_STATS",
-    "android.permission.QUERY_ALL_PACKAGES",
 }
 
 

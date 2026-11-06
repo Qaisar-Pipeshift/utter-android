@@ -10,9 +10,9 @@ ALLOWED_PERMISSIONS = {
     "android.permission.RECORD_AUDIO",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.POST_PROMOTED_NOTIFICATIONS",
-    # Pulse collectors (docs/spec.md §18.4): special accesses granted by hand in Settings, not runtime prompts.
+    # Pulse collector (docs/spec.md §18.4): a special access granted by hand in Settings, not a runtime prompt.
+    # QUERY_ALL_PACKAGES was dropped: nothing in the app resolves other apps' labels (lint QueryAllPackagesPermission).
     "android.permission.PACKAGE_USAGE_STATS",
-    "android.permission.QUERY_ALL_PACKAGES",
 }
 # Services the system binds only while their UI is visible: the keyboard and a Quick Settings tile — plus the
 # Pulse notification listener, which is event-driven and never polls (docs/spec.md §18.4).

@@ -483,7 +483,7 @@ cluster-internal, no external route. Collector down = 502 ⇒ the phone queues l
 | Delta | Gate update |
 |---|---|
 | `pulse.PulseListener` (`NotificationListenerService`) + `BIND_NOTIFICATION_LISTENER_SERVICE` | `check_manifest.py` services allowlist + this; `check_battery_rules.py` whitelists the NLS class (event-driven, no polling) |
-| `PACKAGE_USAGE_STATS` (`tools:ignore=ProtectedPermissions`), `QUERY_ALL_PACKAGES` (app labels for insights) | `check_manifest.py` + `check_merged_manifest.py` allowlists |
+| `PACKAGE_USAGE_STATS` (`tools:ignore=ProtectedPermissions`) — `QUERY_ALL_PACKAGES` dropped: the app never resolves other apps' labels, insights use raw package names | `check_manifest.py` + `check_merged_manifest.py` allowlists |
 | Settings: `pulseEnabled=true`, `pulseMinIntervalMin=15`, `pulseWifiOnly=false`, `pulseStoreCapMb=100` | JSON-only; no UI anywhere |
 
 ### 18.5 Update / rollback compatibility (decided 2026-11-06)
