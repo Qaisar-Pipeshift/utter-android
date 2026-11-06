@@ -27,7 +27,7 @@ def main() -> int:
     bad = []
     for path in sorted(SRC.rglob("*.kt")):
         rel = path.as_posix()
-        exempt = EVENT_DRIVEN.get(rel, set())
+        exempt = next((v for k, v in EVENT_DRIVEN.items() if rel.endswith(k)), set())
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for name, rx in RULES:
                 if name == "raw android.util.Log" and any(rel.endswith(a) for a in ALLOW["Log"]):

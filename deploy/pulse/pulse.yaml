@@ -239,7 +239,8 @@ metadata:
   labels:
     app: utter-pulse
 spec:
-  replicas: 1
+  # 0 = the collector exists but collects nothing until scaled up (the owner's toggle).
+  replicas: 0
   selector:
     matchLabels:
       app: utter-pulse

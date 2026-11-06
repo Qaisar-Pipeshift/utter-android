@@ -46,7 +46,7 @@ class PulseStoreTest {
 
         val batches = store.closedBatches()
         assertEquals(1, batches.size)
-        val lines = store.readBatch(batches.first())
+        val lines = store.readBatch(batches.first())!!
         assertEquals(records.map { it.getString("id") }, lines.map { JSONObject(it).getString("id") })
     }
 
@@ -65,7 +65,7 @@ class PulseStoreTest {
         store.append(List(PulseStore.BATCH_RECORDS + 1) { record(pad = "-${it}") })
 
         assertEquals(1, store.closedBatches().size)
-        assertEquals(PulseStore.BATCH_RECORDS, store.readBatch(store.closedBatches().first()).size)
+        assertEquals(PulseStore.BATCH_RECORDS, store.readBatch(store.closedBatches().first())!!.size)
     }
 
     @Test
@@ -94,7 +94,7 @@ class PulseStoreTest {
         val nowClosed = store.closedBatches()
         assertFalse(nowClosed.any { it.name == firstBatch }) // the oldest batch is gone
         val drop = nowClosed.asSequence()
-            .map { store.readBatch(it) }
+            .map { store.readBatch(it)!! }
             .flatten()
             .plus(listOfNotNull(readOpenRecord()))
             .map { JSONObject(it) }

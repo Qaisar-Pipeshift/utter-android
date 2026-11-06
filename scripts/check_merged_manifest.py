@@ -2,7 +2,7 @@
 
 Runs after `:app:assembleRelease`: reads the merged (or packaged) release manifest and fails when any
 service, receiver, provider or activity outside our own package and the two known AndroidX components appears,
-or when a permission outside the five declared ones appears. The full component list is printed either way.
+or when a permission outside the allowlisted set appears. The full component list is printed either way.
 """
 import pathlib
 import sys

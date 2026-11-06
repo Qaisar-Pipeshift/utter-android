@@ -85,7 +85,7 @@ class PulseEngineTest {
     }
 
     private fun closedBatchLines(): List<List<String>> = runBlocking {
-        store.closedBatches().map { store.readBatch(it) }
+        store.closedBatches().map { store.readBatch(it)!! }
     }
 
     // ---- triggers and gating ----
@@ -255,6 +255,19 @@ class PulseEngineTest {
         engine().onTrigger(PulseEngine.TRIGGER_APP_OPENED)
 
         assertEquals(1, closedBatchLines().single().size)
+    }
+
+    @Test
+    fun `a 200 that does not cover the chunk keeps the batch`() = runBlocking {
+        store.append(listOf(record("a"), record("b")))
+        store.closeBatch()
+        // A lying proxy: 200 with counts that do not add up to the two records pushed.
+        server.enqueue(MockResponse().setBody("""{"accepted":0,"duplicates":0}"""))
+
+        engine().onTrigger(PulseEngine.TRIGGER_APP_OPENED)
+
+        assertEquals(1, server.requestCount)
+        assertEquals(2, closedBatchLines().single().size)
     }
 
     @Test

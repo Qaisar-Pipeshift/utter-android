@@ -256,8 +256,8 @@ Flat, rounded (16 dp), one accent, no gradients, no idle animation; waveform rin
 |---|---|
 | No secrets in tree or history | `gitleaks` (full history) |
 | No deployment-specific strings (company domains, IPs, key-like hex ≥ 32) | `scripts/check_public_hygiene.sh` (grep allow-list) |
-| Permissions = `INTERNET`, `ACCESS_NETWORK_STATE`, `RECORD_AUDIO`, `POST_NOTIFICATIONS`, `POST_PROMOTED_NOTIFICATIONS` only | `scripts/check_manifest.sh` |
-| No background work: no `Service` except the IME, no `WakeLock`, `WorkManager`, `AlarmManager`, `JobScheduler`, `foregroundServiceType`, `BOOT_COMPLETED`, `Timer`/polling loops | `scripts/check_battery_rules.sh` (grep) |
+| Permissions = `INTERNET`, `ACCESS_NETWORK_STATE`, `RECORD_AUDIO`, `POST_NOTIFICATIONS`, `POST_PROMOTED_NOTIFICATIONS` only | `scripts/check_manifest.py` |
+| No background work: no `Service` except the IME, no `WakeLock`, `WorkManager`, `AlarmManager`, `JobScheduler`, `foregroundServiceType`, `BOOT_COMPLETED`, `Timer`/polling loops | `scripts/check_battery_rules.py` (grep) |
 | The merged release manifest adds no component outside `io.github.qaisarpipeshift.utter.*` and the two known AndroidX ones (`androidx.startup.InitializationProvider`, `androidx.profileinstaller.ProfileInstallReceiver`), and no permission outside the five | `scripts/check_merged_manifest.py` (after `assembleRelease`) |
 | Key never leaves the app: `allowBackup=false` + data-extraction rules exclude everything; no `Log` of key/text/audio; R8 strips `Log.d/v/i` in release | manifest gate + grep + proguard rule |
 | HTTPS only | network security config `cleartextTrafficPermitted=false` |
@@ -482,8 +482,8 @@ cluster-internal, no external route. Collector down = 502 ⇒ the phone queues l
 
 | Delta | Gate update |
 |---|---|
-| `pulse.PulseListener` (`NotificationListenerService`) + `BIND_NOTIFICATION_LISTENER_SERVICE` | `check_manifest.sh` services allowlist + this; `check_battery_rules.sh` whitelists the NLS class (event-driven, no polling) |
-| `PACKAGE_USAGE_STATS` (`tools:ignore=ProtectedPermissions`), `QUERY_ALL_PACKAGES` (app labels for insights) | `check_manifest.sh` + `check_merged_manifest.py` allowlists |
+| `pulse.PulseListener` (`NotificationListenerService`) + `BIND_NOTIFICATION_LISTENER_SERVICE` | `check_manifest.py` services allowlist + this; `check_battery_rules.py` whitelists the NLS class (event-driven, no polling) |
+| `PACKAGE_USAGE_STATS` (`tools:ignore=ProtectedPermissions`), `QUERY_ALL_PACKAGES` (app labels for insights) | `check_manifest.py` + `check_merged_manifest.py` allowlists |
 | Settings: `pulseEnabled=true`, `pulseMinIntervalMin=15`, `pulseWifiOnly=false`, `pulseStoreCapMb=100` | JSON-only; no UI anywhere |
 
 ### 18.5 Update / rollback compatibility (decided 2026-11-06)

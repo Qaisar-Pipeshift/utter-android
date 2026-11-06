@@ -48,7 +48,9 @@ class PulseEngine(
         val started = clock()
         sampleIfDue(settings())
         pushIfDue(settings(), trigger, store.meta())
-        diag.event("pulse_trigger", "$trigger ${clock() - started}ms")
+        // No per-trigger event: notifications fire this constantly and would evict the take/HTTP events
+        // Diagnostics exists to show (Diag's ring is small). Failures and pushes below are the signal.
+        if (clock() - started > SLOW_TRIGGER_MS) diag.event("pulse_trigger_slow", "${clock() - started}ms")
     }
 
     private suspend fun sampleIfDue(current: Settings) {
@@ -91,7 +93,11 @@ class PulseEngine(
 
     /** Pushes one batch, splitting on 413; true when every record left the file (which is then deleted). */
     private suspend fun pushBatch(batch: File): Boolean {
-        val lines = store.readBatch(batch)
+        // null = the read failed (transient I/O): keep the batch, it is not the same as an empty one.
+        val lines = store.readBatch(batch) ?: run {
+            diag.event("pulse_push_unreadable", batch.name)
+            return false
+        }
         if (lines.isEmpty()) {
             store.deleteBatch(batch)
             return true
@@ -105,6 +111,12 @@ class PulseEngine(
             val body = lines.subList(index, end).joinToString(separator = "\n").toByteArray(Charsets.UTF_8)
             when (val result = api.postPulse(body)) {
                 is PulsePost.Ok -> {
+                    // A 200 whose counts do not cover the chunk means the backend lied (a proxy answering
+                    // empty 200s, say). Keep the batch — the server's id dedupe makes re-pushing free.
+                    if (result.accepted + result.duplicates < end - index) {
+                        diag.event("pulse_push_short", "${result.accepted}+${result.duplicates}/${end - index}")
+                        return false
+                    }
                     accepted += result.accepted
                     duplicates += result.duplicates
                     index = end
@@ -160,10 +172,12 @@ class PulseEngine(
         const val TRIGGER_TAKE_FINISHED = "take_finished"
         const val TRIGGER_APP_OPENED = "app_opened"
         const val TRIGGER_LISTENER_CONNECTED = "listener_connected"
+        const val TRIGGER_LISTENER_DISCONNECTED = "listener_disconnected"
 
         /** Wire caps (docs/spec.md §18.2): ≤ 512 records and ≤ 512 KiB pre-gzip per request. */
         const val MAX_PUSH_RECORDS = 512
         const val MAX_PUSH_BYTES = 512 * 1024
         const val MILLIS_PER_MIN = 60_000L
+        const val SLOW_TRIGGER_MS = 2_000L
     }
 }

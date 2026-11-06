@@ -1,6 +1,7 @@
 package io.github.qaisarpipeshift.utter.core
 
 import org.json.JSONObject
+import java.util.UUID
 
 /**
  * The eight Pulse record types on the wire (docs/spec.md §18.2); the server's `/v1/pulse` accepts exactly these.
@@ -30,6 +31,14 @@ class PulseIds(
     /** A fresh record frame; collectors add their payload fields to the returned object. */
     fun base(type: String, at: Long = clock()): JSONObject =
         JSONObject().put("id", newId()).put("type", type).put("device", device).put("at", at)
+
+    /**
+     * A deterministic id for a re-observable event (the connect-time shade snapshot): the same [seed] always
+     * yields the same id, so the server's id-dedupe collapses what a rebind re-observes instead of
+     * double-counting it (docs/spec.md §18.1).
+     */
+    fun stable(seed: String): String =
+        UUID.nameUUIDFromBytes(seed.toByteArray(Charsets.UTF_8)).toString()
 }
 
 /**

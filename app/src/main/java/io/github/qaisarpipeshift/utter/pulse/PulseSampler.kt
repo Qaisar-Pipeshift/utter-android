@@ -129,20 +129,19 @@ class PulseSampler(
             val start = dayStart(day, zone)
             val end = dayStart(day + 1, zone)
             val wifi = querySummary(nsm, ConnectivityManager.TYPE_WIFI, start, end) ?: return out to done
-            val mobile = querySummary(nsm, ConnectivityManager.TYPE_MOBILE, start, end) ?: return out to done
+            // Both handles must close on every path: the mobile query can fail after wifi is already open
+            // (denied appop on one transport, a RuntimeException — each leak is an fd in the IME process).
             val totals = HashMap<Int, LongArray>()
-            for ((stats, index) in listOf(wifi to 0, mobile to 2)) {
+            try {
+                accumulate(wifi, 0, totals)
+                val mobile = querySummary(nsm, ConnectivityManager.TYPE_MOBILE, start, end) ?: return out to done
                 try {
-                    val bucket = NetworkStats.Bucket()
-                    while (stats.hasNextBucket()) {
-                        if (!stats.getNextBucket(bucket)) break
-                        val per = totals.getOrPut(bucket.uid) { LongArray(4) }
-                        per[index] += bucket.txBytes
-                        per[index + 1] += bucket.rxBytes
-                    }
+                    accumulate(mobile, 2, totals)
                 } finally {
-                    stats.close()
+                    mobile.close()
                 }
+            } finally {
+                wifi.close()
             }
             for ((uid, bytes) in totals) {
                 out.add(PulseRecords.netDaily(ids, LocalDate.ofEpochDay(day).toString(), uid, bytes[0], bytes[1], bytes[2], bytes[3]))
@@ -150,6 +149,16 @@ class PulseSampler(
             done = day
         }
         return out to done
+    }
+
+    private fun accumulate(stats: NetworkStats, index: Int, totals: HashMap<Int, LongArray>) {
+        val bucket = NetworkStats.Bucket()
+        while (stats.hasNextBucket()) {
+            if (!stats.getNextBucket(bucket)) break
+            val per = totals.getOrPut(bucket.uid) { LongArray(4) }
+            per[index] += bucket.txBytes
+            per[index + 1] += bucket.rxBytes
+        }
     }
 
     private fun querySummary(nsm: NetworkStatsManager, type: Int, start: Long, end: Long): NetworkStats? = try {

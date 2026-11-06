@@ -15,6 +15,7 @@ import io.github.qaisarpipeshift.utter.core.PulseRecords
 import io.github.qaisarpipeshift.utter.core.PulseTypes
 import io.github.qaisarpipeshift.utter.data.PulseStore
 import io.github.qaisarpipeshift.utter.diag.Diag
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,10 +33,18 @@ import org.json.JSONObject
  * never grants the access (or runs below SDK 35) gets a bound but silent service. Android's OTP redaction is
  * honored as-is — the record keeps the rewritten copy and is marked `redacted` (docs/spec.md §18.1). The service
  * is strictly read-only: it never cancels, snoozes or acts on a notification, and never unbinds (docs/spec.md §18.5).
+ *
+ * Extraction never runs on the callback (main) thread and every notification is extracted under its own
+ * `runCatching` inside a handler-equipped scope: one malformed third-party notification must cost one skipped
+ * record, never the process — a crash here would rebind and re-crash on the same shade forever.
  */
 class PulseListener : NotificationListenerService() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, failure ->
+            Diag().event("pulse_listener_failed", failure.javaClass.simpleName)
+        },
+    )
     private var graph: Graph? = null
     private var diag: Diag? = null
 
@@ -58,25 +67,47 @@ class PulseListener : NotificationListenerService() {
         scope.launch {
             val store = graph.pulseStore
             store.append(listOf(PulseRecords.listenerGap(graph.pulseIds, connected = true, reason = null)))
-            // The listener only sees notifications from now on; the ones already on the shade go out as a snapshot.
-            store.append(activeNotifications.orEmpty().map { sbn -> PulseNotifs.posted(graph.pulseIds, sbn, null, snapshot = true) })
+            // The listener only sees notifications from now on; the ones already on the shade go out as a snapshot
+            // with stable ids (PulseIds.stable) so a rebind re-observing the same shade dedupes server-side.
+            val snapshot = activeNotifications.orEmpty().mapNotNull { sbn ->
+                runCatching { PulseNotifs.posted(graph.pulseIds, sbn, null, snapshot = true) }
+                    .onFailure { diag?.event("pulse_snapshot_failed", it.javaClass.simpleName) }
+                    .getOrNull()
+            }
+            store.append(snapshot)
             graph.pulse.onTrigger(PulseEngine.TRIGGER_LISTENER_CONNECTED)
         }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification, rankingMap: RankingMap) {
-        val ids = graph?.pulseIds ?: return
-        record(PulseNotifs.posted(ids, sbn, rankingOf(sbn, rankingMap)))
+        val graph = graph ?: return
+        scope.launch {
+            // Extraction touches third-party parcelables: never trust it on the main thread, never let it throw.
+            val record = runCatching { PulseNotifs.posted(graph.pulseIds, sbn, rankingOf(sbn, rankingMap)) }
+                .onFailure { diag?.event("pulse_notif_failed", it.javaClass.simpleName) }
+                .getOrNull() ?: return@launch
+            graph.pulseStore.append(listOf(record))
+            graph.pulse.onTrigger(PulseEngine.TRIGGER_NOTIFICATION)
+        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap, reason: Int) {
-        val ids = graph?.pulseIds ?: return
-        record(PulseNotifs.removed(ids, sbn, reason))
+        val graph = graph ?: return
+        scope.launch {
+            val record = runCatching { PulseNotifs.removed(graph.pulseIds, sbn, reason) }
+                .onFailure { diag?.event("pulse_notif_failed", it.javaClass.simpleName) }
+                .getOrNull() ?: return@launch
+            graph.pulseStore.append(listOf(record))
+            graph.pulse.onTrigger(PulseEngine.TRIGGER_NOTIFICATION)
+        }
     }
 
     override fun onInterruptionFilterChanged(filter: Int) {
-        val ids = graph?.pulseIds ?: return
-        record(PulseRecords.dnd(ids, filter))
+        val graph = graph ?: return
+        scope.launch {
+            graph.pulseStore.append(listOf(PulseRecords.dnd(graph.pulseIds, filter)))
+            graph.pulse.onTrigger(PulseEngine.TRIGGER_NOTIFICATION)
+        }
     }
 
     override fun onListenerDisconnected() {
@@ -86,16 +117,9 @@ class PulseListener : NotificationListenerService() {
             graph.pulseStore.append(
                 listOf(PulseRecords.listenerGap(graph.pulseIds, connected = false, reason = null)),
             )
-            // Nothing will fire this engine again until the system rebinds, so flush now.
-            graph.pulse.onTrigger(PulseEngine.TRIGGER_NOTIFICATION)
-        }
-    }
-
-    private fun record(record: JSONObject) {
-        val graph = graph ?: return
-        scope.launch {
-            graph.pulseStore.append(listOf(record))
-            graph.pulse.onTrigger(PulseEngine.TRIGGER_NOTIFICATION)
+            // Nothing will fire this engine again until the system rebinds, and this trigger closes the open
+            // batch, so the gap record leaves with the next push attempt (docs/spec.md §18.2).
+            graph.pulse.onTrigger(PulseEngine.TRIGGER_LISTENER_DISCONNECTED)
         }
     }
 
@@ -130,18 +154,20 @@ internal object PulseNotifs {
             .put("ongoing", sbn.isOngoing)
             .put("progress", extras.getInt(Notification.EXTRA_PROGRESS))
             .put("progressMax", extras.getInt(Notification.EXTRA_PROGRESS_MAX))
-            .put("title", title)
-            .put("text", text)
-            .put("bigText", extras.charSequence(Notification.EXTRA_BIG_TEXT))
-            .put("subText", extras.charSequence(Notification.EXTRA_SUB_TEXT))
-            .put("infoText", extras.charSequence(Notification.EXTRA_INFO_TEXT))
+            // org.json's put(key, null String) REMOVES the key; NULL keeps it so absent and null stay distinct
+            // on the wire for every optional text field.
+            .put("title", title ?: JSONObject.NULL)
+            .put("text", text ?: JSONObject.NULL)
+            .put("bigText", extras.charSequence(Notification.EXTRA_BIG_TEXT) ?: JSONObject.NULL)
+            .put("subText", extras.charSequence(Notification.EXTRA_SUB_TEXT) ?: JSONObject.NULL)
+            .put("infoText", extras.charSequence(Notification.EXTRA_INFO_TEXT) ?: JSONObject.NULL)
             .put("inbox", stringArray(extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)))
             .put("conversationTitle", style(notification)?.conversationTitle?.toString() ?: JSONObject.NULL)
             .put("messages", messages(notification))
             .put("actions", actions(notification))
             .put("image", hasImage(notification))
             .put("redacted", PulseRecords.isRedacted(text))
-        if (snapshot) record.put("snapshot", true)
+        if (snapshot) record.put("id", ids.stable("snap:${sbn.key}")).put("snapshot", true)
         if (ranking != null) {
             record.put("importance", ranking.importance)
             record.put("rank", ranking.rank)

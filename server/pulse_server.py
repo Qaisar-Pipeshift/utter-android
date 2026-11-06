@@ -28,6 +28,7 @@ import json
 import os
 import sys
 import threading
+import zlib
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
@@ -143,7 +144,8 @@ class Handler(BaseHTTPRequestHandler):
         enc = (self.headers.get("Content-Encoding") or "identity").lower()
         try:
             data = gzip.decompress(raw) if enc == "gzip" else raw
-        except (OSError, EOFError, gzip.BadGzipFile):
+        except (OSError, EOFError, zlib.error, gzip.BadGzipFile):
+            # zlib.error is not an OSError: corrupt deflate data must still answer 400, not reset.
             self._send(400, {"error": "bad gzip"})
             return
 
@@ -167,23 +169,33 @@ class Handler(BaseHTTPRequestHandler):
 
         with _lock:
             fresh = []
-            for rid, line in records:
-                if rid in _seen_ids:
+            for rec in records:
+                if rec[0] in _seen_ids:
                     continue
-                _seen_ids.add(rid)  # before append, so two copies in one batch dedup too
-                fresh.append(line)
+                fresh.append(rec)
             duplicates = len(records) - len(fresh)
-            accepted = len(fresh)
+            accepted = 0
             if fresh:
                 path = os.path.join(LOG_DIR, f"pulse-{now_day}.ndjson")
-                with open(path, "a", encoding="utf-8") as f:
-                    for line in fresh:
-                        f.write(line + "\n")
-                    f.flush()
-                    os.fsync(f.fileno())
-                if LOG_STDOUT:
-                    for line in fresh:
-                        print("[accepted] " + line, flush=True)
+                try:
+                    # Ids join the dedup set only after their line is on disk: if the write dies midway
+                    # (PVC full), the not-yet-written ids stay unseen, so the phone's retry is honest.
+                    with open(path, "a", encoding="utf-8") as f:
+                        for rid, line in fresh:
+                            if rid in _seen_ids:  # two copies of one id inside this batch
+                                continue
+                            f.write(line + "\n")
+                            f.flush()
+                            _seen_ids.add(rid)
+                            accepted += 1
+                        os.fsync(f.fileno())
+                    duplicates += len(fresh) - accepted
+                    if LOG_STDOUT:
+                        for line in fresh:
+                            print("[accepted] " + line, flush=True)
+                except OSError:
+                    self._send(503, {"error": "log write failed", "accepted": accepted})
+                    return
         self._send(200, {"accepted": accepted, "duplicates": duplicates, "rejected": rejected})
 
 

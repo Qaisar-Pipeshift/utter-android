@@ -59,13 +59,16 @@ class PulseStore(
         mutex.withLock { closedBatchesLocked() }
     }
 
-    /** The batch's non-blank lines, in record order. */
-    suspend fun readBatch(batch: File): List<String> = withContext(io) {
+    /**
+     * The batch's non-blank lines, in record order. Null means the read itself failed (transient I/O) — the
+     * caller must keep the batch; an empty list genuinely means no records.
+     */
+    suspend fun readBatch(batch: File): List<String>? = withContext(io) {
         mutex.withLock {
             try {
                 batch.readLines(Charsets.UTF_8).filter { it.isNotBlank() }
             } catch (_: IOException) {
-                emptyList()
+                null
             }
         }
     }
@@ -90,9 +93,11 @@ class PulseStore(
                 val kept = lines.filterIndexed { i, _ -> i != lineIndex }
                 val tmp = File(dir, batch.name + ".tmp")
                 tmp.writeText(if (kept.isEmpty()) "" else kept.joinToString(separator = "\n", postfix = "\n"), Charsets.UTF_8)
+                // POSIX rename replaces the target atomically; the original is only removed by the successful
+                // rename itself, so a failed swap leaves the intact batch in place and just drops the tmp.
                 if (!tmp.renameTo(batch)) {
-                    batch.delete()
-                    if (!tmp.renameTo(batch)) return@withLock -1L
+                    tmp.delete()
+                    return@withLock -1L
                 }
                 appendDroppedRecordLocked(dropped)
                 dropped
@@ -127,13 +132,35 @@ class PulseStore(
 
     private fun appendLocked(records: List<JSONObject>): Boolean = try {
         if (!dir.exists()) dir.mkdirs()
+        cleanStaleTmpLocked()
         val open = openBatchLocked() ?: newOpenBatchLocked()
+        // A previous append can have died mid-write (ENOSPC/EIO) leaving a torn final line; without this
+        // separator the next record would fuse onto it and both would be rejected server-side.
+        sealTornTailLocked(open)
         open.appendText(records.joinToString(separator = "\n", postfix = "\n") { it.toString() }, Charsets.UTF_8)
         if (lineCountLocked(open) >= BATCH_RECORDS) open.renameTo(closedNameOf(open))
         enforceCapLocked()
         true
     } catch (_: IOException) {
         false
+    }
+
+    /** Appends the missing newline when the open batch does not end with one (a torn last line). */
+    private fun sealTornTailLocked(open: File) {
+        if (open.length() == 0L) return
+        try {
+            java.io.RandomAccessFile(open, "r").use { raf ->
+                raf.seek(open.length() - 1)
+                if (raf.read() != '\n'.code) open.appendText("\n", Charsets.UTF_8)
+            }
+        } catch (_: IOException) {
+            // Unreadable tail: the push path's null-read handling deals with it, not this write.
+        }
+    }
+
+    /** Removes leftover *.tmp files from interrupted atomic writes so they never skew the cap. */
+    private fun cleanStaleTmpLocked() {
+        dir.listFiles()?.filterTo(ArrayList(), { it.name.endsWith(".tmp") })?.forEach { it.delete() }
     }
 
     private fun enforceCapLocked() {
