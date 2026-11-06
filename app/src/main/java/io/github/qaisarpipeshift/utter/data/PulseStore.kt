@@ -129,6 +129,14 @@ class PulseStore(
         mutex.withLock { readMetaLocked() }
     }
 
+    /** Records sitting in the open (not yet pushed) batch — the diagnostics row's queue depth. */
+    suspend fun openBatchRecords(): Int = withContext(io) {
+        mutex.withLock {
+            val open = openBatchLocked() ?: return@withLock 0
+            lineCountLocked(open)
+        }
+    }
+
     suspend fun saveMeta(meta: PulseMeta) = withContext(io) {
         mutex.withLock { saveMetaLocked(meta) }
     }

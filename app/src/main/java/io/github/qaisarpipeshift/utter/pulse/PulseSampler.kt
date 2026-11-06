@@ -16,6 +16,7 @@ import io.github.qaisarpipeshift.utter.core.PulseSample
 import io.github.qaisarpipeshift.utter.core.PulseSampling
 import io.github.qaisarpipeshift.utter.core.PulseWindows
 import io.github.qaisarpipeshift.utter.data.PulseStore
+import io.github.qaisarpipeshift.utter.diag.Diag
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -37,6 +38,7 @@ class PulseSampler(
     context: Context,
     private val store: PulseStore,
     private val ids: PulseIds,
+    private val diag: Diag? = null,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : PulseSampling {
 
@@ -68,6 +70,8 @@ class PulseSampler(
                 usm.queryEvents(begin, now)
             }
         } catch (_: SecurityException) {
+            // Silent deny cost a full debugging session once: it must be visible in Diagnostics.
+            diag?.event("pulse_sample_denied", "usage_events")
             return emptyList<JSONObject>() to cursor // usage access not granted yet
         }
         if (events == null) return emptyList<JSONObject>() to cursor // device locked (docs note)
@@ -97,6 +101,7 @@ class PulseSampler(
             val stats = try {
                 usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, dayStart(day + 1, zone))
             } catch (_: SecurityException) {
+                diag?.event("pulse_sample_denied", "usage_daily")
                 return out to done
             }
             if (stats == null) return out to done // device locked: the day stays open for the next sample
@@ -164,6 +169,7 @@ class PulseSampler(
     private fun querySummary(nsm: NetworkStatsManager, type: Int, start: Long, end: Long): NetworkStats? = try {
         nsm.querySummary(type, null, start, end) // null subscriberId = all networks, no telephony state needed
     } catch (_: SecurityException) {
+        diag?.event("pulse_sample_denied", "net_daily")
         null
     }
 
