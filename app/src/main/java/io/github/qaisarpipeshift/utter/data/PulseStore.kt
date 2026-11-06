@@ -12,12 +12,13 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-/** The per-source sampling cursors and throttle timestamp; persisted so a restart never re-samples. */
+/** The per-source sampling cursors and throttle timestamps; persisted so a restart never re-samples or retries hot. */
 data class PulseMeta(
     val usageCursor: Long = 0,
     val dailyDay: Long = 0,
     val netDay: Long = 0,
     val lastSampleAt: Long = 0,
+    val lastPushAt: Long = 0,
 )
 
 /**
@@ -114,6 +115,7 @@ class PulseStore(
                     .put("dailyDay", meta.dailyDay)
                     .put("netDay", meta.netDay)
                     .put("lastSampleAt", meta.lastSampleAt)
+                    .put("lastPushAt", meta.lastPushAt)
                     .toString())
             } catch (_: IOException) {
                 // Lost cursors only re-sample what Android still keeps; never fatal.
@@ -211,6 +213,7 @@ class PulseStore(
             dailyDay = root.optLong("dailyDay", 0),
             netDay = root.optLong("netDay", 0),
             lastSampleAt = root.optLong("lastSampleAt", 0),
+            lastPushAt = root.optLong("lastPushAt", 0),
         )
     }
 

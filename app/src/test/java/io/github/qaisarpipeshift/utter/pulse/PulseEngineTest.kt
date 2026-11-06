@@ -207,16 +207,43 @@ class PulseEngineTest {
         store.closeBatch()
         server.enqueue(MockResponse().setBody("""{"accepted":1,"duplicates":0}""")) // [a]
         server.enqueue(MockResponse().setResponseCode(413)) // [big] alone, still too large
-        server.enqueue(MockResponse().setBody("""{"accepted":1,"duplicates":0}""")) // [c]
 
         engine().onTrigger(PulseEngine.TRIGGER_APP_OPENED)
 
-        assertEquals(3, server.requestCount)
+        assertEquals(2, server.requestCount)
+        assertEquals(listOf("a", "c"), closedBatchLines().single()) // big dropped, the rest kept
+
+        now += 15 * 60_000 + 1 // the failed push waits out the interval before retrying
+        server.enqueue(MockResponse().setBody("""{"accepted":2,"duplicates":1}"""))
+        engine().onTrigger(PulseEngine.TRIGGER_TAKE_FINISHED)
         assertTrue(closedBatchLines().isEmpty()) // the batch emptied out and was deleted
         store.closeBatch()
         val marker = closedBatchLines().single().single()
         assertTrue(marker.contains("store_dropped"))
         assertTrue(JSONObject(marker).getLong("bytes") > 512 * 1024)
+    }
+
+    @Test
+    fun `a failed push waits out the interval instead of retrying per notification`() = runBlocking {
+        store.append(listOf(record("a")))
+        store.closeBatch()
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        engine().onTrigger(PulseEngine.TRIGGER_NOTIFICATION)
+        assertEquals(1, server.requestCount)
+
+        store.append(listOf(record("b")))
+        store.closeBatch()
+        now += 5 * 60_000
+        engine().onTrigger(PulseEngine.TRIGGER_NOTIFICATION)
+        assertEquals(1, server.requestCount) // gated: no second attempt five minutes later
+
+        now += 11 * 60_000
+        server.enqueue(MockResponse().setBody("""{"accepted":1,"duplicates":0}""")) // [a]
+        server.enqueue(MockResponse().setBody("""{"accepted":1,"duplicates":0}""")) // [b]
+        engine().onTrigger(PulseEngine.TRIGGER_TAKE_FINISHED)
+        assertEquals(3, server.requestCount)
+        assertTrue(closedBatchLines().isEmpty())
     }
 
     @Test

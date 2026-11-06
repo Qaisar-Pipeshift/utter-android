@@ -2,6 +2,7 @@ package io.github.qaisarpipeshift.utter.pulse
 
 import android.os.Build
 import io.github.qaisarpipeshift.utter.core.PulseSampling
+import io.github.qaisarpipeshift.utter.data.PulseMeta
 import io.github.qaisarpipeshift.utter.data.PulseStore
 import io.github.qaisarpipeshift.utter.data.Settings
 import io.github.qaisarpipeshift.utter.diag.Diag
@@ -39,11 +40,15 @@ class PulseEngine(
         if (!settings().pulseEnabled) return
         if (sdkInt() < 35) return
         mutex.withLock {
-            val started = clock()
-            sampleIfDue(settings())
-            pushIfDue(settings(), trigger)
-            diag.event("pulse_trigger", "$trigger ${clock() - started}ms")
+            onTriggerLocked(trigger)
         }
+    }
+
+    private suspend fun onTriggerLocked(trigger: String) {
+        val started = clock()
+        sampleIfDue(settings())
+        pushIfDue(settings(), trigger, store.meta())
+        diag.event("pulse_trigger", "$trigger ${clock() - started}ms")
     }
 
     private suspend fun sampleIfDue(current: Settings) {
@@ -69,11 +74,18 @@ class PulseEngine(
         diag.event("pulse_sample", "${sample.records.size}")
     }
 
-    private suspend fun pushIfDue(current: Settings, trigger: String) {
+    private suspend fun pushIfDue(current: Settings, trigger: String, meta: PulseMeta) {
         if (trigger != TRIGGER_NOTIFICATION) store.closeBatch()
         if (current.pulseWifiOnly && !unmetered()) return
+        // A failing server must not cost one request per notification: after a failed attempt the pushes
+        // wait out the same interval the sampler does (docs/spec.md §18.2). A successful drain sets nothing,
+        // so the next closed batch still goes immediately.
+        if (meta.lastPushAt > 0 && clock() - meta.lastPushAt < current.pulseMinIntervalMin * MILLIS_PER_MIN) return
         for (batch in store.closedBatches()) {
-            if (!pushBatch(batch)) return // oldest first: retry the rest on the next trigger
+            if (!pushBatch(batch)) {
+                store.saveMeta(meta.copy(lastPushAt = clock()))
+                return // oldest first: retry the rest on the next trigger
+            }
         }
     }
 
@@ -100,19 +112,18 @@ class PulseEngine(
 
                 is PulsePost.TooLarge -> {
                     if (end - index <= 1) {
-                        // One record alone exceeds the wire cap (a huge MessagingStyle, say). Dropping it with a
-                        // store_dropped marker beats retrying a request it can never win on every trigger.
+                        // One record alone exceeds the wire cap (a huge MessagingStyle, say). Drop it with a
+                        // store_dropped marker and stop here: the in-memory line indexes would drift from the
+                        // rewritten file if we kept pushing. The next trigger re-reads the batch.
                         val dropped = store.dropRecord(batch, index)
                         if (dropped < 0L) {
                             diag.event("pulse_push_stuck", "$index")
-                            return false
+                        } else {
+                            diag.event("pulse_push_dropped", "$dropped")
                         }
-                        diag.event("pulse_push_dropped", "$dropped")
-                        index += 1
-                        limit = MAX_PUSH_RECORDS
-                    } else {
-                        limit = (end - index) / 2 // split this range and retry it smaller
+                        return false
                     }
+                    limit = (end - index) / 2 // split this range and retry it smaller
                 }
 
                 is PulsePost.Rejected -> {
