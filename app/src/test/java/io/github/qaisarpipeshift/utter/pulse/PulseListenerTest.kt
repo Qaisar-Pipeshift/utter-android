@@ -113,6 +113,15 @@ class PulseListenerTest {
             .addMessage("hello", 1_700_000_100_000, person)
             .addMessage("hi", 1_700_000_200_000, "Bob")
         val notification = builder().setStyle(style).build()
+        // A real device's framework writes EXTRA_MESSAGES when the style populates; Robolectric's build()
+        // does not — hand-populate exactly what the device-side extras carry (same parcelable type).
+        notification.extras.putParcelableArray(
+            Notification.EXTRA_MESSAGES,
+            arrayOf(
+                Notification.MessagingStyle.Message("hello", 1_700_000_100_000, person),
+                Notification.MessagingStyle.Message("hi", 1_700_000_200_000, "Bob"),
+            ),
+        )
 
         val record = PulseNotifs.posted(ids, sbn(notification), ranking = null)
 
