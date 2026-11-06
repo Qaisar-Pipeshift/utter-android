@@ -2,9 +2,11 @@ package io.github.qaisarpipeshift.utter.net
 
 import io.github.qaisarpipeshift.utter.core.Prompts
 import io.github.qaisarpipeshift.utter.core.Transcriber
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPOutputStream
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -273,6 +275,40 @@ class Api(
         }
     }
 
+    /**
+     * `POST /v1/pulse` (docs/spec.md §18.2): NDJSON lines, gzipped, under `X-API-Key` — the same key check the
+     * server applies to `/v2/transcript`. A 200 body is `{"accepted":n,"duplicates":m}` (server-side id dedupe
+     * makes retries free); 413 asks the caller to split the batch. Nothing is logged: pulse bodies carry
+     * notification text and the key is private.
+     */
+    suspend fun postPulse(ndjson: ByteArray): PulsePost = withContext(Dispatchers.IO) {
+        val cfg = config() ?: return@withContext PulsePost.Network(KIND_CONFIG)
+        val base = baseUrl() ?: return@withContext PulsePost.Network(KIND_CONFIG)
+        val gzip = ByteArrayOutputStream().also { buffer ->
+            GZIPOutputStream(buffer).use { stream -> stream.write(ndjson) }
+        }.toByteArray()
+        val request = Request.Builder()
+            .url("$base/v1/pulse")
+            .header("X-API-Key", cfg.apiKey)
+            .header("Content-Encoding", "gzip")
+            .post(gzip.toRequestBody(NDJSON_MEDIA))
+            .build()
+        try {
+            http.client.newCall(request).await().use { response ->
+                when {
+                    response.code == 413 -> PulsePost.TooLarge
+                    !response.isSuccessful -> PulsePost.Rejected(response.code)
+                    else -> {
+                        val body = parseObject(response.body.string())
+                        PulsePost.Ok(body?.optInt("accepted", 0) ?: 0, body?.optInt("duplicates", 0) ?: 0)
+                    }
+                }
+            }
+        } catch (failure: IOException) {
+            PulsePost.Network(failure.networkKind())
+        }
+    }
+
     // ---- helpers ----
 
     private fun baseUrl(): String? = config()?.let { normalizeBaseUrl(it.baseUrl, http.allowCleartext) }
@@ -315,6 +351,7 @@ class Api(
     private companion object {
         val JSON_MEDIA = "application/json".toMediaType()
         val PCM_MEDIA = "audio/pcm".toMediaType()
+        val NDJSON_MEDIA = "application/x-ndjson".toMediaType()
 
         const val DETAIL_SETUP = "Set up Utter"
         const val DETAIL_URL = "Invalid server URL"
