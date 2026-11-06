@@ -472,11 +472,11 @@ trigger (cursor only advances after a successful local write).
 
 `deploy/pulse/pulse.yaml` runs `server/pulse_server.py` as a one-replica pod (python:3.12-slim, key from the
 owner-created `utter-pulse-key` secret, logs on a 1 Gi PVC; runbook `deploy/pulse/README.md`): enable/disable =
-`kubectl scale deployment utter-pulse --replicas=1/0`; pull =
-`curl -H 'X-API-Key: <key>' https://<stt-host>/v1/pulse/logs -o pulse.ndjson` (`?day=YYYYMMDD` for one day,
-404 when absent), or `kubectl logs deploy/utter-pulse -f` for the live `[accepted]`-line stream. The owner's
-ingress (the one fronting the STT domain) routes `/v1/pulse` and `/v1/pulse/logs` → `utter-pulse:8907`. Collector
-down = 502 ⇒ the phone queues locally and backfills on the next trigger — record ids dedupe, so overlap is free.
+`kubectl scale deployment utter-pulse --replicas=1/0`; pull = port-forward (`kubectl -n stt-lab port-forward
+deploy/utter-pulse 8907:8907`) then `curl -H 'X-API-Key: <key>' http://localhost:8907/v1/pulse/logs -o
+pulse.ndjson` (`?day=YYYYMMDD` for one day, 404 when absent), or `kubectl logs deploy/utter-pulse -f` for the
+live `[accepted]`-line stream. The ingress routes only `/v1/pulse` → `utter-pulse:8907`; the logs endpoint stays
+cluster-internal, no external route. Collector down = 502 ⇒ the phone queues locally and backfills (ids dedupe).
 
 ### 18.4 Manifest / gates / settings deltas
 

@@ -308,8 +308,8 @@ spec:
     - port: 8907
       targetPort: 8907
 ---
-# The same ingress that fronts the STT domain gains two dumb Prefix paths (the app only uses /v1/pulse;
-# Prefix keeps query strings like ?day= working). TLS terminates with the host's existing certificate secret.
+# The ingress carries ONLY the phone's push path. /v1/pulse/logs deliberately has no ingress route — it stays
+# cluster-internal behind its X-API-Key check; pull via port-forward (see the README runbook).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -328,13 +328,6 @@ spec:
       http:
         paths:
           - path: /v1/pulse
-            pathType: Prefix
-            backend:
-              service:
-                name: utter-pulse
-                port:
-                  number: 8907
-          - path: /v1/pulse/logs
             pathType: Prefix
             backend:
               service:
