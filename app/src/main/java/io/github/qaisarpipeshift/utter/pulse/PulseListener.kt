@@ -30,7 +30,8 @@ import org.json.JSONObject
  *
  * Inert below Android 15 and before any callback arrives: `onCreate` skips graph wiring entirely, so a user who
  * never grants the access (or runs below SDK 35) gets a bound but silent service. Android's OTP redaction is
- * honored as-is — the record keeps the rewritten copy and is marked `redacted` (docs/spec.md §18.1).
+ * honored as-is — the record keeps the rewritten copy and is marked `redacted` (docs/spec.md §18.1). The service
+ * is strictly read-only: it never cancels, snoozes or acts on a notification, and never unbinds (docs/spec.md §18.5).
  */
 class PulseListener : NotificationListenerService() {
 

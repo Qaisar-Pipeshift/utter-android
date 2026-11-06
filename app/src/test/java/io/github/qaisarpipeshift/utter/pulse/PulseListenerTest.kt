@@ -9,7 +9,6 @@ import android.graphics.Color
 import android.os.Process
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.qaisarpipeshift.utter.core.PulseIds
 import io.github.qaisarpipeshift.utter.core.PulseRecords
@@ -19,6 +18,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
@@ -30,7 +30,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class PulseListenerTest {
 
-    private val context: Context = ApplicationProvider.getApplicationContext()
+    private val context: Context = RuntimeEnvironment.getApplication()
 
     private var counter = 0
     private val ids = PulseIds(device = "d", newId = { "id-${++counter}" }, clock = { 1_700_000_000_000 })
@@ -193,6 +193,19 @@ class PulseListenerTest {
         assertTrue(record.has("importance"))
         assertTrue(record.has("rank"))
         assertTrue(record.has("dndSuppressed"))
+    }
+
+    @Test
+    fun `the listener stays strictly read-only (spec §18.5)`() {
+        // No action methods may be overridden or called: it never cancels, snoozes, ranks or unbinds.
+        val actions = listOf(
+            "cancelNotification", "cancelNotifications", "snoozeNotification",
+            "requestRebind", "requestUnbind", "setInterruptionFilter",
+        )
+        val declared = PulseListener::class.java.declaredMethods.map { it.name }
+        for (action in actions) {
+            assertFalse("$action must not appear on the listener", declared.contains(action))
+        }
     }
 
     private fun smallBitmap(): Bitmap {
