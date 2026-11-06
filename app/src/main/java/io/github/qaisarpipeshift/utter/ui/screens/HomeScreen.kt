@@ -79,6 +79,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import android.content.ComponentName
+import android.service.notification.NotificationListenerService
+import io.github.qaisarpipeshift.utter.pulse.PulseEngine
+import io.github.qaisarpipeshift.utter.pulse.PulseListener
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -303,7 +307,22 @@ fun HomeScreen(graph: Graph, onNavigate: (String) -> Unit) {
                 ServerStatus(ui = ui, notConfigured = setUpNeeded)
                 Spacer(modifier = Modifier.height(14.dp))
                 Button(
-                    onClick = { if (setUpNeeded) onNavigate(Routes.SERVER) else model.check() },
+                    onClick = {
+                        if (setUpNeeded) {
+                            onNavigate(Routes.SERVER)
+                        } else {
+                            model.check()
+                            // Pulse (spec §18.2): the same tap forces the notification-listener binding
+                            // alive (an app update can silently drop it — seen live on OxygenOS) and
+                            // fires one flush: sample + close stale batch + push.
+                            runCatching {
+                                NotificationListenerService.requestRebind(
+                                    ComponentName(graph.appContext, PulseListener::class.java),
+                                )
+                            }
+                            scope.launch { graph.pulse.onTrigger(PulseEngine.TRIGGER_APP_OPENED) }
+                        }
+                    },
                     enabled = !ui.checking,
                     modifier = Modifier.fillMaxWidth(),
                 ) {

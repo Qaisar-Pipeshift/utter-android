@@ -49,6 +49,9 @@ import io.github.qaisarpipeshift.utter.R
 import io.github.qaisarpipeshift.utter.core.ResourceDay
 import io.github.qaisarpipeshift.utter.core.ResourceMath
 import io.github.qaisarpipeshift.utter.ui.UtterScreen
+import android.app.AppOpsManager
+import androidx.core.app.NotificationManagerCompat
+import io.github.qaisarpipeshift.utter.data.PulseMeta
 import io.github.qaisarpipeshift.utter.ui.components.SectionCard
 import io.github.qaisarpipeshift.utter.ui.components.SettingRow
 import io.github.qaisarpipeshift.utter.ui.theme.utterWarningColor
@@ -71,6 +74,7 @@ fun DiagnosticsScreen(graph: Graph, onBack: () -> Unit) {
     var dump by remember { mutableStateOf(graph.diag.dump()) }
     var cpuMs by remember { mutableLongStateOf(Process.getElapsedCpuTime()) }
     var resources by remember { mutableStateOf<List<ResourceDay>?>(null) }
+    var pulse by remember { mutableStateOf<PulseRow?>(null) }
 
     LaunchedEffect(graph) { resources = graph.ledger.snapshot() }
 
@@ -78,7 +82,9 @@ fun DiagnosticsScreen(graph: Graph, onBack: () -> Unit) {
         dump = graph.diag.dump()
         cpuMs = Process.getElapsedCpuTime()
         scope.launch { resources = graph.ledger.snapshot() }
+        scope.launch { pulse = pulseRow(graph) }
     }
+    LaunchedEffect(graph) { pulse = pulseRow(graph) }
 
     UtterScreen(title = stringResource(R.string.screen_diagnostics), onBack = onBack) {
         SectionCard(title = stringResource(R.string.diag_section_events)) {
@@ -199,6 +205,24 @@ fun DiagnosticsScreen(graph: Graph, onBack: () -> Unit) {
             }
         }
 
+        SectionCard(title = stringResource(R.string.diag_pulse_title)) {
+            val row = pulse
+            if (row == null) {
+                Text(stringResource(R.string.diag_empty), style = MaterialTheme.typography.bodySmall)
+            } else {
+                SelectionContainer {
+                    Text(
+                        text = row.render(context),
+                        modifier = Modifier.padding(top = 10.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                    )
+                }
+            }
+        }
+
         SectionCard(title = stringResource(R.string.diag_section_device)) {
             SettingRow(
                 title = stringResource(R.string.diag_cpu),
@@ -269,4 +293,50 @@ private fun openAppSettings(context: Context) {
     } catch (_: ActivityNotFoundException) {
         // A stripped build without the Settings app: there is nothing to open.
     }
+}
+
+
+/**
+ * One live snapshot of Pulse's phone-side state for the diagnostics row (spec §18.2): the two special-access
+ * truths (the Settings UI can show granted while the appop was dropped — seen on OxygenOS after an update),
+ * the queue depth, and the engine's persisted cursors/timestamps.
+ */
+private data class PulseRow(
+    val usageOp: String,
+    val listener: Boolean,
+    val closedBatches: Int,
+    val openRecords: Int,
+    val meta: PulseMeta,
+    val now: Long,
+)
+
+private suspend fun pulseRow(graph: Graph): PulseRow {
+    val appOps = graph.appContext.getSystemService(AppOpsManager::class.java)
+    val mode = appOps?.checkOpNoThrow("android:get_usage_stats", Process.myUid(), graph.appContext.packageName)
+    val usageOp = when (mode) {
+        AppOpsManager.MODE_ALLOWED -> "ALLOWED"
+        AppOpsManager.MODE_IGNORED -> "IGNORED"
+        AppOpsManager.MODE_ERRORED -> "ERRORED"
+        AppOpsManager.MODE_DEFAULT -> "DEFAULT"
+        else -> "DENIED"
+    }
+    val listener = NotificationManagerCompat.getEnabledListenerPackages(graph.appContext)
+        .contains(graph.appContext.packageName)
+    return PulseRow(
+        usageOp = usageOp,
+        listener = listener,
+        closedBatches = graph.pulseStore.closedBatches().size,
+        openRecords = graph.pulseStore.openBatchRecords(),
+        meta = graph.pulseStore.meta(),
+        now = System.currentTimeMillis(),
+    )
+}
+
+private fun PulseRow.render(context: android.content.Context): String = buildString {
+    val minutes = { at: Long -> if (at <= 0) context.getString(R.string.diag_pulse_never) else
+        context.getString(R.string.diag_pulse_min_ago, ((now - at) / 60_000).toInt()) }
+    appendLine(context.getString(R.string.diag_pulse_usage, usageOp))
+    appendLine(context.getString(R.string.diag_pulse_listener, listener.toString()))
+    appendLine(context.getString(R.string.diag_pulse_queue, closedBatches, openRecords))
+    append(context.getString(R.string.diag_pulse_meta, meta.usageCursor, minutes(meta.lastSampleAt), minutes(meta.lastPushAt), minutes(meta.openSince)))
 }

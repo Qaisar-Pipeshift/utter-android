@@ -148,7 +148,7 @@ class Graph(app: Context) {
         PulseEngine(
             store = pulseStore,
             sampler = if (Build.VERSION.SDK_INT >= 35) {
-                PulseSampler(appContext, pulseStore, pulseIds)
+                PulseSampler(appContext, pulseStore, pulseIds, diag)
             } else {
                 PulseSampling { PulseSample(emptyList(), 0, 0, 0) }
             },
