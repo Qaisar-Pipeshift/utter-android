@@ -34,3 +34,18 @@ sealed interface CleanResult {
 
 /** One settings-screen probe: success, elapsed milliseconds, and a short human-readable detail. */
 data class Probe(val ok: Boolean, val ms: Long, val detail: String)
+
+/** Outcome of one `/v1/pulse` push (docs/spec.md §18.2). Batches are kept on anything but [Ok] and retried later. */
+sealed interface PulsePost {
+    /** 200 — the server accepted [accepted] fresh records and had already seen [duplicates] of them. */
+    data class Ok(val accepted: Int, val duplicates: Int) : PulsePost
+
+    /** 413 — the batch exceeded the server's body limit; the caller splits it and retries. */
+    data object TooLarge : PulsePost
+
+    /** Any other HTTP status, including 401 for a rejected key. */
+    data class Rejected(val code: Int) : PulsePost
+
+    /** No response (offline), or the app has no server or key yet; [kind] matches [SttResult.Network] kinds. */
+    data class Network(val kind: String) : PulsePost
+}

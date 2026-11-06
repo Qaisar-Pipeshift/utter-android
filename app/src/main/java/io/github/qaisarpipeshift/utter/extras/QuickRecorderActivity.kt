@@ -53,6 +53,7 @@ import io.github.qaisarpipeshift.utter.core.Inserter
 import io.github.qaisarpipeshift.utter.core.PanelState
 import io.github.qaisarpipeshift.utter.core.TakeAction
 import io.github.qaisarpipeshift.utter.core.TakeRequest
+import io.github.qaisarpipeshift.utter.pulse.PulseEngine
 import io.github.qaisarpipeshift.utter.ui.MainActivity
 import java.util.Locale
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -118,7 +119,12 @@ class QuickRecorderActivity : ComponentActivity() {
             isOnline = ::isOnline,
             diag = graph.diag,
             prewarm = { graph.api.warm() },
-            onTakeEnd = graph.ledger::takeEnded,
+            onTakeEnd = { micMs, live ->
+                graph.ledger.takeEnded(micMs, live)
+                // The quick recorder finishes takes outside the IME; its takes are the same Pulse
+                // take-finished trigger (docs/spec.md §18.2). The engine throttles itself.
+                lifecycleScope.launch { graph.pulse.onTrigger(PulseEngine.TRIGGER_TAKE_FINISHED) }
+            },
             historyLabel = getString(R.string.extras_quick_app_label),
         )
         lifecycleScope.launch { graph.pending.purge() }

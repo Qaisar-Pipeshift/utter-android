@@ -1,0 +1,274 @@
+package io.github.qaisarpipeshift.utter.data
+
+import io.github.qaisarpipeshift.utter.core.PulseIds
+import io.github.qaisarpipeshift.utter.core.PulseRecords
+import io.github.qaisarpipeshift.utter.core.PulseTypes
+import java.io.File
+import java.io.IOException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+
+/** The per-source sampling cursors and throttle timestamps; persisted so a restart never re-samples or retries hot. */
+data class PulseMeta(
+    val usageCursor: Long = 0,
+    val dailyDay: Long = 0,
+    val netDay: Long = 0,
+    val lastSampleAt: Long = 0,
+    val lastPushAt: Long = 0,
+)
+
+/**
+ * Pulse's local store (docs/spec.md §18.2): JSON lines in `filesDir/pulse/`, one file per batch.
+ *
+ * Why file batches instead of one big log: the push unit is a batch — the engine sends closed batches oldest
+ * first, deletes them on a 2xx, and keeps them on any failure, so retries are idempotent (unique record ids plus
+ * the server's dedupe). The open batch carries a `.part` suffix and is never pushed. The 100 MB cap drops the
+ * oldest closed batch and appends a `store_dropped` record (docs/spec.md §18.2). Every operation runs under one
+ * [Mutex] on IO — notification callbacks arrive on the main thread and must never block it.
+ */
+class PulseStore(
+    private val dir: File,
+    private val ids: PulseIds,
+    private val capBytes: () -> Long = { DEFAULT_CAP_MB * BYTES_PER_MB },
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+) {
+    private val mutex = Mutex()
+
+    /** Appends records to the open batch. False when the disk write failed — the engine must not advance cursors. */
+    suspend fun append(records: List<JSONObject>): Boolean = withContext(io) {
+        if (records.isEmpty()) return@withContext true
+        mutex.withLock { appendLocked(records) }
+    }
+
+    /** Seals the open batch so the next push can send it; an empty open batch is deleted. */
+    suspend fun closeBatch() = withContext(io) {
+        mutex.withLock {
+            val open = openBatchLocked()
+            if (open != null) {
+                if (open.length() == 0L) open.delete() else open.renameTo(closedNameOf(open))
+            }
+        }
+    }
+
+    /** Closed batch files, oldest first — the push order (docs/spec.md §18.2). */
+    suspend fun closedBatches(): List<File> = withContext(io) {
+        mutex.withLock { closedBatchesLocked() }
+    }
+
+    /**
+     * The batch's non-blank lines, in record order. Null means the read itself failed (transient I/O) — the
+     * caller must keep the batch; an empty list genuinely means no records.
+     */
+    suspend fun readBatch(batch: File): List<String>? = withContext(io) {
+        mutex.withLock {
+            try {
+                batch.readLines(Charsets.UTF_8).filter { it.isNotBlank() }
+            } catch (_: IOException) {
+                null
+            }
+        }
+    }
+
+    /** Removes a batch after every record in it was accepted. */
+    suspend fun deleteBatch(batch: File) = withContext(io) {
+        mutex.withLock { batch.delete() }
+    }
+
+    /**
+     * Removes one record too large for the wire (docs/spec.md §18.2): the batch keeps its other records and a
+     * `store_dropped` record goes into the open batch. Returns the dropped bytes, or -1 when the removal failed —
+     * the caller then keeps the batch instead of spinning on a request it can never win. The index counts the same
+     * non-blank lines [readBatch] returns.
+     */
+    suspend fun dropRecord(batch: File, lineIndex: Int): Long = withContext(io) {
+        mutex.withLock {
+            try {
+                val lines = batch.readLines(Charsets.UTF_8).filter { it.isNotBlank() }
+                if (lineIndex !in lines.indices) return@withLock -1L
+                val dropped = lines[lineIndex].toByteArray(Charsets.UTF_8).size.toLong()
+                val kept = lines.filterIndexed { i, _ -> i != lineIndex }
+                val tmp = File(dir, batch.name + ".tmp")
+                tmp.writeText(if (kept.isEmpty()) "" else kept.joinToString(separator = "\n", postfix = "\n"), Charsets.UTF_8)
+                // POSIX rename replaces the target atomically; the original is only removed by the successful
+                // rename itself, so a failed swap leaves the intact batch in place and just drops the tmp.
+                if (!tmp.renameTo(batch)) {
+                    tmp.delete()
+                    return@withLock -1L
+                }
+                appendDroppedRecordLocked(dropped)
+                dropped
+            } catch (_: IOException) {
+                -1L
+            }
+        }
+    }
+
+    suspend fun meta(): PulseMeta = withContext(io) {
+        mutex.withLock { readMetaLocked() }
+    }
+
+    suspend fun saveMeta(meta: PulseMeta) = withContext(io) {
+        mutex.withLock {
+            try {
+                if (!dir.exists()) dir.mkdirs()
+                atomicWrite(File(dir, META_FILE), JSONObject()
+                    .put("usageCursor", meta.usageCursor)
+                    .put("dailyDay", meta.dailyDay)
+                    .put("netDay", meta.netDay)
+                    .put("lastSampleAt", meta.lastSampleAt)
+                    .put("lastPushAt", meta.lastPushAt)
+                    .toString())
+            } catch (_: IOException) {
+                // Lost cursors only re-sample what Android still keeps; never fatal.
+            }
+        }
+    }
+
+    // ---- locked internals ----
+
+    private fun appendLocked(records: List<JSONObject>): Boolean = try {
+        if (!dir.exists()) dir.mkdirs()
+        cleanStaleTmpLocked()
+        var remaining = records
+        while (remaining.isNotEmpty()) {
+            val open = openBatchLocked() ?: newOpenBatchLocked()
+            // A previous append can have died mid-write (ENOSPC/EIO) leaving a torn final line; without this
+            // separator the next record would fuse onto it and both would be rejected server-side.
+            sealTornTailLocked(open)
+            // Fill the open batch to the limit, close it, carry the remainder into a fresh batch —
+            // a closed batch never exceeds BATCH_RECORDS no matter how large one append was.
+            val capacity = BATCH_RECORDS - lineCountLocked(open)
+            val head = remaining.take(capacity)
+            remaining = remaining.drop(capacity)
+            open.appendText(head.joinToString(separator = "\n", postfix = "\n") { it.toString() }, Charsets.UTF_8)
+            if (lineCountLocked(open) >= BATCH_RECORDS) open.renameTo(closedNameOf(open))
+        }
+        enforceCapLocked()
+        true
+    } catch (_: IOException) {
+        false
+    }
+
+    /** Appends the missing newline when the open batch does not end with one (a torn last line). */
+    private fun sealTornTailLocked(open: File) {
+        if (open.length() == 0L) return
+        try {
+            java.io.RandomAccessFile(open, "r").use { raf ->
+                raf.seek(open.length() - 1)
+                if (raf.read() != '\n'.code) open.appendText("\n", Charsets.UTF_8)
+            }
+        } catch (_: IOException) {
+            // Unreadable tail: the push path's null-read handling deals with it, not this write.
+        }
+    }
+
+    /** Removes leftover *.tmp files from interrupted atomic writes so they never skew the cap. */
+    private fun cleanStaleTmpLocked() {
+        dir.listFiles()?.filterTo(ArrayList(), { it.name.endsWith(".tmp") })?.forEach { it.delete() }
+    }
+
+    private fun enforceCapLocked() {
+        val cap = capBytes()
+        if (cap <= 0) return
+        var droppedBytes = 0L
+        var droppedFiles = 0
+        while (totalBytesLocked() > cap) {
+            val oldest = closedBatchesLocked().firstOrNull() ?: break
+            val size = oldest.length()
+            if (!oldest.delete()) break
+            droppedBytes += size
+            droppedFiles++
+        }
+        if (droppedFiles == 0) return
+        appendDroppedRecordLocked(droppedBytes, droppedFiles)
+    }
+
+    private fun appendDroppedRecordLocked(bytes: Long, files: Int = 1) {
+        try {
+            val open = openBatchLocked() ?: newOpenBatchLocked()
+            open.appendText(PulseRecords.storeDropped(ids, files = files, bytes = bytes).toString() + "\n", Charsets.UTF_8)
+        } catch (_: IOException) {
+            // The dropped data is already gone; the marker is best-effort like every write here.
+        }
+    }
+
+    private fun openBatchLocked(): File? = dir.listFiles()
+        ?.firstOrNull { it.isFile && it.name.endsWith(OPEN_SUFFIX) }
+
+    private fun newOpenBatchLocked(): File {
+        val next = (allBatchesLocked().maxOfOrNull { it.seq } ?: 0) + 1
+        return File(dir, "b-$next$OPEN_SUFFIX")
+    }
+
+    private fun closedBatchesLocked(): List<File> = allBatchesLocked()
+        .filter { it.open == false }
+        .sortedBy { it.seq }
+        .map { it.file }
+
+    private data class Named(val file: File, val seq: Int, val open: Boolean?)
+
+    private fun allBatchesLocked(): List<Named> = dir.listFiles()
+        ?.mapNotNull { file ->
+            val name = file.name
+            when {
+                file.isFile && name.endsWith(CLOSED_SUFFIX) -> Named(file, seqOf(name), false)
+                file.isFile && name.endsWith(OPEN_SUFFIX) -> Named(file, seqOf(name), true)
+                else -> null
+            }
+        }
+        .orEmpty()
+
+    private fun seqOf(name: String): Int =
+        name.removePrefix("b-").removeSuffix(OPEN_SUFFIX).removeSuffix(CLOSED_SUFFIX).toIntOrNull() ?: 0
+
+    private fun closedNameOf(open: File): File = File(dir, open.name.removeSuffix(OPEN_SUFFIX) + CLOSED_SUFFIX)
+
+    private fun lineCountLocked(file: File): Int = try {
+        file.readLines(Charsets.UTF_8).count { it.isNotBlank() }
+    } catch (_: IOException) {
+        BATCH_RECORDS // unreadable: close it so the push path deals with it instead of growing forever
+    }
+
+    private fun totalBytesLocked(): Long = dir.listFiles()?.sumOf { it.length() } ?: 0L
+
+    private fun readMetaLocked(): PulseMeta {
+        val file = File(dir, META_FILE)
+        if (!file.exists()) return PulseMeta()
+        val root = try {
+            JSONObject(file.readText(Charsets.UTF_8))
+        } catch (_: Exception) {
+            return PulseMeta()
+        }
+        return PulseMeta(
+            usageCursor = root.optLong("usageCursor", 0),
+            dailyDay = root.optLong("dailyDay", 0),
+            netDay = root.optLong("netDay", 0),
+            lastSampleAt = root.optLong("lastSampleAt", 0),
+            lastPushAt = root.optLong("lastPushAt", 0),
+        )
+    }
+
+    private fun atomicWrite(target: File, text: String) {
+        val tmp = File(dir, "$META_FILE.tmp")
+        tmp.writeText(text, Charsets.UTF_8)
+        if (!tmp.renameTo(target)) {
+            target.delete()
+            if (!tmp.renameTo(target)) tmp.delete()
+        }
+    }
+
+    companion object {
+        /** A batch closes itself at this many records so one push stays well inside the 512-record wire cap. */
+        const val BATCH_RECORDS = 256
+
+        const val DEFAULT_CAP_MB = 100
+        const val BYTES_PER_MB = 1024L * 1024
+        const val OPEN_SUFFIX = ".jsonl.part"
+        const val CLOSED_SUFFIX = ".jsonl"
+        const val META_FILE = "meta.json"
+    }
+}

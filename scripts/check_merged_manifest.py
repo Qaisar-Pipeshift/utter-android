@@ -2,7 +2,7 @@
 
 Runs after `:app:assembleRelease`: reads the merged (or packaged) release manifest and fails when any
 service, receiver, provider or activity outside our own package and the two known AndroidX components appears,
-or when a permission outside the five declared ones appears. The full component list is printed either way.
+or when a permission outside the allowlisted set appears. The full component list is printed either way.
 """
 import pathlib
 import sys
@@ -27,6 +27,8 @@ ALLOWED_PERMISSIONS = {
     # androidx.core declares this signature permission in every app for ContextCompat.registerReceiver; inert while
     # no code registers a receiver (Utter registers none).
     "io.github.qaisarpipeshift.utter.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+    # Pulse collector (docs/spec.md §18.4): the app's own special access, granted by hand in Settings.
+    "android.permission.PACKAGE_USAGE_STATS",
 }
 
 

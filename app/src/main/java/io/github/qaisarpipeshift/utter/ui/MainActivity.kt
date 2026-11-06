@@ -28,15 +28,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
 import io.github.qaisarpipeshift.utter.R
 import io.github.qaisarpipeshift.utter.UtterApp
 import io.github.qaisarpipeshift.utter.core.LedgerEvent
 import io.github.qaisarpipeshift.utter.data.SetupLink
 import io.github.qaisarpipeshift.utter.data.Settings
 import io.github.qaisarpipeshift.utter.data.ThemeMode
+import io.github.qaisarpipeshift.utter.pulse.PulseEngine
 import io.github.qaisarpipeshift.utter.ui.theme.UtterTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 /**
  * The settings app's single activity (docs/spec.md §16, docs/plan.md Task 11).
@@ -146,6 +149,15 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         linkRequests.value = setupLinkFrom(intent)
         if (intent.getStringExtra(EXTRA_ONBOARDING_STEP) == STEP_MIC) micStepRequests.value += 1
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // App opened is one of Pulse's four flush triggers (docs/spec.md §18.2); the engine throttles itself,
+        // so a quick app switch costs one capability read and at most one throttled sample and push.
+        lifecycleScope.launch {
+            (application as? UtterApp)?.graph?.pulse?.onTrigger(PulseEngine.TRIGGER_APP_OPENED)
+        }
     }
 
     override fun onStop() {

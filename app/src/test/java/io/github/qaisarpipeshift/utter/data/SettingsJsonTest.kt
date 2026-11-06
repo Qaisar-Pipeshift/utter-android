@@ -4,6 +4,7 @@ import io.github.qaisarpipeshift.utter.core.Preset
 import io.github.qaisarpipeshift.utter.core.Presets
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SettingsJsonTest {
@@ -62,6 +63,10 @@ class SettingsJsonTest {
         ttsVoice = "nova",
         onboardingDone = true,
         prewarm = false,
+        pulseEnabled = false,
+        pulseMinIntervalMin = 30,
+        pulseWifiOnly = true,
+        pulseStoreCapMb = 50,
     )
 
     @Test
@@ -155,5 +160,49 @@ class SettingsJsonTest {
     @Test
     fun `an empty preset list falls back to the built-ins`() {
         assertEquals(Presets.defaults, SettingsJson.decode("""{"presets":[]}""").presets)
+    }
+
+    @Test
+    fun `pulse settings default to on with the documented values`() {
+        val decoded = SettingsJson.decode("{}")
+        assertTrue(decoded.pulseEnabled)
+        assertEquals(15, decoded.pulseMinIntervalMin)
+        assertFalse(decoded.pulseWifiOnly)
+        assertEquals(100, decoded.pulseStoreCapMb)
+    }
+
+    @Test
+    fun `pulse numbers are clamped`() {
+        val decoded = SettingsJson.decode("""{"pulseMinIntervalMin":0,"pulseStoreCapMb":99999}""")
+        assertEquals(1, decoded.pulseMinIntervalMin)
+        assertEquals(1024, decoded.pulseStoreCapMb)
+    }
+
+    @Test
+    fun `a v0-1-4-shaped settings blob decodes with old fields intact and pulse defaults (spec §18-5)`() {
+        val old = """{"baseUrl":"https://old.example.test","tapHandsFree":false,"holdThresholdMs":400,
+            "theme":"dark","ttsVoice":"nova","onboardingDone":true,"notch":true,
+            "historyOn":true,"historyLimit":200,"keepAudioDays":0}"""
+
+        val decoded = SettingsJson.decode(old)
+
+        assertEquals("https://old.example.test", decoded.baseUrl)
+        assertFalse(decoded.tapHandsFree)
+        assertEquals(400, decoded.holdThresholdMs)
+        assertEquals(ThemeMode.DARK, decoded.theme)
+        assertTrue(decoded.pulseEnabled)
+        assertEquals(15, decoded.pulseMinIntervalMin)
+        assertFalse(decoded.pulseWifiOnly)
+        assertEquals(100, decoded.pulseStoreCapMb)
+    }
+
+    @Test
+    fun `unknown keys never survive an encode-decode roundtrip (spec §18-5)`() {
+        val fromFuture = SettingsJson.encode(custom).removeSuffix("}") + ""","futureKey":{"nested":1}}"""
+
+        val decoded = SettingsJson.decode(fromFuture)
+
+        assertEquals(custom, decoded)
+        assertEquals(custom, SettingsJson.decode(SettingsJson.encode(decoded)))
     }
 }

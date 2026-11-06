@@ -256,8 +256,8 @@ Flat, rounded (16 dp), one accent, no gradients, no idle animation; waveform rin
 |---|---|
 | No secrets in tree or history | `gitleaks` (full history) |
 | No deployment-specific strings (company domains, IPs, key-like hex ≥ 32) | `scripts/check_public_hygiene.sh` (grep allow-list) |
-| Permissions = `INTERNET`, `ACCESS_NETWORK_STATE`, `RECORD_AUDIO`, `POST_NOTIFICATIONS`, `POST_PROMOTED_NOTIFICATIONS` only | `scripts/check_manifest.sh` |
-| No background work: no `Service` except the IME, no `WakeLock`, `WorkManager`, `AlarmManager`, `JobScheduler`, `foregroundServiceType`, `BOOT_COMPLETED`, `Timer`/polling loops | `scripts/check_battery_rules.sh` (grep) |
+| Permissions = `INTERNET`, `ACCESS_NETWORK_STATE`, `RECORD_AUDIO`, `POST_NOTIFICATIONS`, `POST_PROMOTED_NOTIFICATIONS` only | `scripts/check_manifest.py` |
+| No background work: no `Service` except the IME, no `WakeLock`, `WorkManager`, `AlarmManager`, `JobScheduler`, `foregroundServiceType`, `BOOT_COMPLETED`, `Timer`/polling loops | `scripts/check_battery_rules.py` (grep) |
 | The merged release manifest adds no component outside `io.github.qaisarpipeshift.utter.*` and the two known AndroidX ones (`androidx.startup.InitializationProvider`, `androidx.profileinstaller.ProfileInstallReceiver`), and no permission outside the five | `scripts/check_merged_manifest.py` (after `assembleRelease`) |
 | Key never leaves the app: `allowBackup=false` + data-extraction rules exclude everything; no `Log` of key/text/audio; R8 strips `Log.d/v/i` in release | manifest gate + grep + proguard rule |
 | HTTPS only | network security config `cleartextTrafficPermitted=false` |
@@ -468,21 +468,35 @@ trigger (cursor only advances after a successful local write).
 | Store cap | 100 MB (≈ 45 MB / 30 days offline est.); overflow drops oldest + writes a `store_dropped` record |
 | Push | `POST /v1/pulse`, `Content-Encoding: gzip`, `application/x-ndjson`, same `X-API-Key` check as `/v2/transcript`; line = `{id, type, device, at, …}`; types `usage_event · usage_daily · net_daily · notif_posted · notif_removed · listener_gap · dnd · store_dropped`; `200 {"accepted":n,"duplicates":m}`; 413 → split and retry |
 
-### 18.3 Reference collector (server side; Qais runs it on demand)
+### 18.3 Reference collector (owner's cluster; a scale-0/1 pod)
 
-`server/pulse_server.py` — stdlib-only Python, no DB: `POST /v1/pulse` + `X-API-Key` (env) → gunzip →
-append valid lines to `pulse-YYYYMMDD.ndjson` (id-deduped in memory, seeded from existing logs) →
-`{"accepted":n,"duplicates":m}`. Run whenever wanted; the phone never needs it up (502 ⇒ queue ⇒ backfill).
+`deploy/pulse/pulse.yaml` runs `server/pulse_server.py` as a one-replica pod (python:3.12-slim, key from the
+owner-created `utter-pulse-key` secret, logs on a 1 Gi PVC; runbook `deploy/pulse/README.md`): enable/disable =
+`kubectl scale deployment utter-pulse --replicas=1/0`; pull = port-forward (`kubectl -n stt-lab port-forward
+deploy/utter-pulse 8907:8907`) then `curl -H 'X-API-Key: <key>' http://localhost:8907/v1/pulse/logs -o
+pulse.ndjson` (`?day=YYYYMMDD` for one day, 404 when absent), or `kubectl logs deploy/utter-pulse -f` for the
+live `[accepted]`-line stream. The ingress routes only `/v1/pulse` → `utter-pulse:8907`; the logs endpoint stays
+cluster-internal, no external route. Collector down = 502 ⇒ the phone queues locally and backfills (ids dedupe).
 
 ### 18.4 Manifest / gates / settings deltas
 
 | Delta | Gate update |
 |---|---|
-| `pulse.PulseListener` (`NotificationListenerService`) + `BIND_NOTIFICATION_LISTENER_SERVICE` | `check_manifest.sh` services allowlist + this; `check_battery_rules.sh` whitelists the NLS class (event-driven, no polling) |
-| `PACKAGE_USAGE_STATS` (`tools:ignore=ProtectedPermissions`), `QUERY_ALL_PACKAGES` (app labels for insights) | `check_manifest.sh` + `check_merged_manifest.py` allowlists |
+| `pulse.PulseListener` (`NotificationListenerService`) + `BIND_NOTIFICATION_LISTENER_SERVICE` | `check_manifest.py` services allowlist + this; `check_battery_rules.py` whitelists the NLS class (event-driven, no polling) |
+| `PACKAGE_USAGE_STATS` (`tools:ignore=ProtectedPermissions`) — `QUERY_ALL_PACKAGES` dropped: the app never resolves other apps' labels, insights use raw package names | `check_manifest.py` + `check_merged_manifest.py` allowlists |
 | Settings: `pulseEnabled=true`, `pulseMinIntervalMin=15`, `pulseWifiOnly=false`, `pulseStoreCapMb=100` | JSON-only; no UI anywhere |
 
-### 18.5 Device checks (extend §12)
+### 18.5 Update / rollback compatibility (decided 2026-11-06)
+
+| Rule | Detail |
+|---|---|
+| Settings JSON both-ways safe | New `pulse*` keys default when absent (existing opt-with-fallback parser, verified); v0.1.4 ignores unknown keys → import/export/backup round-trips between versions without loss |
+| No migrations, no renames | Existing DataStore file, keys, SecretStore/HistoryStore/PendingStore/StatsStore/ledger schemas untouched; Pulse adds only new files (`pulse/` dir) |
+| Grants survive downgrade + re-update | Notification-listener grant is keyed by component (stale grant on 0.1.4 is inert, rebinds on re-update); usage appop persists; same signing key throughout |
+| Rollback method | `adb install -r -d utter-<old>.apk` keeps app data (Obtainium cannot downgrade); orphan pulse files on 0.1.4 are inert |
+| Proof | Unit test: v0.1.4-shaped settings JSON fixture decodes with old fields intact + pulse defaults; new encode → decode roundtrip. Device check D19: downgrade → re-upgrade, settings + grants intact |
+
+### 18.6 Device checks (extend §12)
 
 D14 grant both accesses on the OnePlus (incl. ⋮ "Allow restricted settings" for the sideloaded APK) · D15 notifications + usage arrive at the server, then survive 24 h offline → full backfill on reconnect · D16 24 h battery delta with Pulse on (expect « 1 %; recorded, not gated) · D17 reboot → `listener_gap` + snapshot, no duplicates · D18 Samsung grant path identical.
 

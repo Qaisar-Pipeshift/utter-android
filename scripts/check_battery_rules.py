@@ -17,15 +17,22 @@ RULES = [
 ]
 # The diagnostics ring buffer is the one place allowed to log (sizes, codes and timings only).
 ALLOW = {"Log": {"diag/Diag.kt"}}
+# The Pulse notification listener (docs/spec.md §18.4) is the one always-on component: the system binds it only to
+# deliver callbacks and it never polls, so no timer-style rule may silently grow to cover it. Nothing is exempt
+# today — the entry pins that review so a future rule must consider the listener explicitly.
+EVENT_DRIVEN = {"pulse/PulseListener.kt": set()}
 
 
 def main() -> int:
     bad = []
     for path in sorted(SRC.rglob("*.kt")):
         rel = path.as_posix()
+        exempt = next((v for k, v in EVENT_DRIVEN.items() if rel.endswith(k)), set())
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for name, rx in RULES:
                 if name == "raw android.util.Log" and any(rel.endswith(a) for a in ALLOW["Log"]):
+                    continue
+                if name in exempt:
                     continue
                 if rx.search(line):
                     bad.append(f"{rel}:{n}: {name}")
