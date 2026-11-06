@@ -10,10 +10,12 @@ Usage:
     PULSE_KEY=<same key as the app> python3 pulse_server.py
 
 Environment:
-    PULSE_KEY      required — API key, must match the app's key
-    PULSE_BIND     host:port to bind (default localhost:8907 — put a TLS reverse proxy in front)
-    PULSE_LOG_DIR  where the .ndjson logs go (default ./pulse-logs, created if missing)
-    PULSE_MAX_MB   max accepted body size in MiB (default 64)
+    PULSE_KEY         required — API key, must match the app's key
+    PULSE_BIND        host:port to bind (default localhost:8907 — put a TLS reverse proxy in front)
+    PULSE_LOG_DIR     where the .ndjson logs go (default ./pulse-logs, created if missing)
+    PULSE_MAX_MB      max accepted body size in MiB (default 64)
+    PULSE_LOG_STDOUT  1 = also print every accepted record line to stdout as '[accepted] <line>'
+                      (flushed, so 'kubectl logs -f' streams the data; file writes are unchanged)
 """
 import gzip
 import io
@@ -28,6 +30,7 @@ KEY = os.environ.get("PULSE_KEY", "")
 BIND = os.environ.get("PULSE_BIND", "localhost:8907")
 LOG_DIR = os.environ.get("PULSE_LOG_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "pulse-logs"))
 MAX_BODY = int(os.environ.get("PULSE_MAX_MB", "64")) * 1024 * 1024
+LOG_STDOUT = os.environ.get("PULSE_LOG_STDOUT", "0") == "1"
 
 TYPES = {
     "usage_event", "usage_daily", "net_daily", "notif_posted",
@@ -136,6 +139,9 @@ class Handler(BaseHTTPRequestHandler):
                         f.write(line + "\n")
                     f.flush()
                     os.fsync(f.fileno())
+                if LOG_STDOUT:
+                    for line in fresh:
+                        print("[accepted] " + line, flush=True)
         self._send(200, {"accepted": accepted, "duplicates": duplicates, "rejected": rejected})
 
 

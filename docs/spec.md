@@ -468,11 +468,14 @@ trigger (cursor only advances after a successful local write).
 | Store cap | 100 MB (≈ 45 MB / 30 days offline est.); overflow drops oldest + writes a `store_dropped` record |
 | Push | `POST /v1/pulse`, `Content-Encoding: gzip`, `application/x-ndjson`, same `X-API-Key` check as `/v2/transcript`; line = `{id, type, device, at, …}`; types `usage_event · usage_daily · net_daily · notif_posted · notif_removed · listener_gap · dnd · store_dropped`; `200 {"accepted":n,"duplicates":m}`; 413 → split and retry |
 
-### 18.3 Reference collector (server side; Qais runs it on demand)
+### 18.3 Reference collector (owner's cluster; a scale-0/1 pod)
 
-`server/pulse_server.py` — stdlib-only Python, no DB: `POST /v1/pulse` + `X-API-Key` (env) → gunzip →
-append valid lines to `pulse-YYYYMMDD.ndjson` (id-deduped in memory, seeded from existing logs) →
-`{"accepted":n,"duplicates":m}`. Run whenever wanted; the phone never needs it up (502 ⇒ queue ⇒ backfill).
+`deploy/pulse/pulse.yaml` runs `server/pulse_server.py` as a one-replica pod (python:3.12-slim, key from the
+owner-created `utter-pulse-key` secret; runbook `deploy/pulse/README.md`): enable/disable =
+`kubectl scale deployment utter-pulse --replicas=1/0`; pull = `kubectl logs deploy/utter-pulse -f` (every accepted
+record printed as `[accepted] <line>`) or `kubectl cp` the daily files. The owner's ingress (the one fronting the
+STT domain) adds a dumb path rule `/v1/pulse -> utter-pulse:8907`. Collector down = 502 ⇒ the phone queues
+locally and backfills on the next trigger — record ids dedupe, so overlap is free.
 
 ### 18.4 Manifest / gates / settings deltas
 
