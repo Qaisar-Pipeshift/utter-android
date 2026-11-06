@@ -6,6 +6,11 @@ valid record to a daily log file. The log IS the store; insights are computed of
 against it. Designed to be started and stopped whenever wanted — the phone queues locally
 while this is down and backfills on the next trigger.
 
+Endpoints:
+    POST /v1/pulse                    append gzip NDJSON records (X-API-Key) — id-deduped, daily files
+    GET  /v1/pulse/logs?day=YYYYMMDD  pull the logs (X-API-Key) as text/plain: every pulse-*.ndjson
+                                      oldest-filename-first, chunk-streamed; ?day= one file, 404 when absent
+
 Usage:
     PULSE_KEY=<same key as the app> python3 pulse_server.py
 
@@ -25,6 +30,7 @@ import sys
 import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
 
 KEY = os.environ.get("PULSE_KEY", "")
 BIND = os.environ.get("PULSE_BIND", "localhost:8907")
@@ -39,6 +45,8 @@ TYPES = {
 
 _lock = threading.Lock()
 _seen_ids: set[str] = set()
+
+CHUNK_BYTES = 64 * 1024
 
 
 def load_seen_ids() -> None:
@@ -78,10 +86,44 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path == "/health":
+        parts = urlsplit(self.path)
+        if parts.path == "/health":
             self._send(200, {"ok": True, "records": len(_seen_ids)})
+        elif parts.path == "/v1/pulse/logs":
+            self._send_logs(parse_qs(parts.query).get("day", [None])[0])
         else:
             self._send(404, {"error": "not found"})
+
+    def _send_logs(self, day: str | None) -> None:
+        """Streams the log files verbatim, chunk-wise, without touching the dedupe state."""
+        if not KEY or self.headers.get("X-API-Key") != KEY:
+            self._send(401, {"error": "unauthorized"})
+            return
+        try:
+            names = os.listdir(LOG_DIR) if day is None else [f"pulse-{day}.ndjson"]
+            paths = [
+                os.path.join(LOG_DIR, name)
+                for name in sorted(names)
+                if name.startswith("pulse-") and name.endswith(".ndjson")
+                and os.path.isfile(os.path.join(LOG_DIR, name))
+            ]
+        except OSError:
+            paths = []
+        if day is not None and not paths:
+            self._send(404, {"error": "no such day"})
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+        try:
+            for path in paths:
+                with open(path, "rb") as f:
+                    while chunk := f.read(CHUNK_BYTES):
+                        self.wfile.write(f"{len(chunk):X}\r\n".encode("ascii") + chunk + b"\r\n")
+            self.wfile.write(b"0\r\n\r\n")
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # the puller hung up mid-stream; nothing to clean up
 
     def do_POST(self):
         if self.path != "/v1/pulse":
