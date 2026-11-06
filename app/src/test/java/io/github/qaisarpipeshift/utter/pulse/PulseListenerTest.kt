@@ -1,7 +1,6 @@
 package io.github.qaisarpipeshift.utter.pulse
 
 import android.app.Notification
-import android.os.Parcelable
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -115,10 +114,15 @@ class PulseListenerTest {
             .addMessage("hi", 1_700_000_200_000, "Bob")
         val notification = builder().setStyle(style).build()
         // A real device's framework writes EXTRA_MESSAGES when the style populates; Robolectric's build()
-        // does not — hand-populate exactly what the device-side extras carry (same parcelable type).
-        val m1: Parcelable = Notification.MessagingStyle.Message("hello", 1_700_000_100_000, person)
-        val m2: Parcelable = Notification.MessagingStyle.Message("hi", 1_700_000_200_000, "Bob")
-        notification.extras.putParcelableArray(Notification.EXTRA_MESSAGES, arrayOf(m1, m2))
+        // does not — hand-populate exactly what the device-side extras carry: Bundles (Message is not a
+        // Parcelable), produced by the same public toBundle() the framework serializes with.
+        notification.extras.putParcelableArray(
+            Notification.EXTRA_MESSAGES,
+            arrayOf(
+                Notification.MessagingStyle.Message("hello", 1_700_000_100_000, person).toBundle(),
+                Notification.MessagingStyle.Message("hi", 1_700_000_200_000, "Bob").toBundle(),
+            ),
+        )
 
         val record = PulseNotifs.posted(ids, sbn(notification), ranking = null)
 

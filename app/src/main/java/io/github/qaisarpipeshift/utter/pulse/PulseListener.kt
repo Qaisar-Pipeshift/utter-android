@@ -213,12 +213,11 @@ internal object PulseNotifs {
 
     private fun messages(notification: Notification): JSONArray {
         val out = JSONArray()
-        // The Class overload of getParcelableArray is API 33+ and unimplemented in Robolectric; the plain
-        // one returns the Message parcelables in-process just the same.
-        @Suppress("DEPRECATION")
-        val parcels = notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES).orEmpty()
-        for (parcel in parcels) {
-            val message = parcel as? Notification.MessagingStyle.Message ?: continue
+        // Extras carry the messages as Bundles — MessagingStyle.Message is not itself Parcelable. This
+        // public converter is the framework's own restore path (Notification.restoreFromExtras).
+        val messages = Notification.MessagingStyle.Message
+            .getMessagesFromBundleArray(notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES))
+        for (message in messages) {
             @Suppress("DEPRECATION")
             val sender = message.senderPerson?.name?.toString() ?: message.sender?.toString() ?: ""
             out.put(JSONObject().put("sender", sender).put("text", message.text?.toString() ?: "").put("time", message.timestamp))
