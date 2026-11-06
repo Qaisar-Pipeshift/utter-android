@@ -3,7 +3,6 @@ package io.github.qaisarpipeshift.utter.pulse
 import android.app.Notification
 import android.os.Build
 import android.os.Bundle
-import android.os.Parcelable
 import android.service.notification.NotificationListenerService
 import android.service.notification.NotificationListenerService.Ranking
 import android.service.notification.NotificationListenerService.RankingMap
@@ -214,7 +213,11 @@ internal object PulseNotifs {
 
     private fun messages(notification: Notification): JSONArray {
         val out = JSONArray()
-        for (parcel in notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES, Parcelable::class.java).orEmpty()) {
+        // The Class overload of getParcelableArray is API 33+ and unimplemented in Robolectric; the plain
+        // one returns the Message parcelables in-process just the same.
+        @Suppress("DEPRECATION")
+        val parcels = notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES).orEmpty()
+        for (parcel in parcels) {
             val message = parcel as? Notification.MessagingStyle.Message ?: continue
             @Suppress("DEPRECATION")
             val sender = message.senderPerson?.name?.toString() ?: message.sender?.toString() ?: ""

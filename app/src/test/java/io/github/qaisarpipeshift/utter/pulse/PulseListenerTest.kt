@@ -176,8 +176,8 @@ class PulseListenerTest {
     @Test
     fun `the reason map covers the documented removal reasons`() {
         val names = listOf(
-            "REASON_CLICK", "REASON_DISMISS", "REASON_CANCEL", "REASON_TIMEOUT", "REASON_SNOOZED",
-            "REASON_CHANNEL_BANNED", "REASON_CLEAR_ALL",
+            "REASON_CLICK", "REASON_CANCEL", "REASON_CANCEL_ALL", "REASON_ERROR", "REASON_APP_CANCEL",
+            "REASON_TIMEOUT", "REASON_SNOOZED", "REASON_CHANNEL_BANNED", "REASON_GROUP_SUMMARY_CANCELED",
         )
         for (name in names) {
             assertTrue("$name missing", PulseNotifs.reasonMap().values.contains(name))

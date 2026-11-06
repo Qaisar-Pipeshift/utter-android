@@ -133,12 +133,20 @@ class PulseStore(
     private fun appendLocked(records: List<JSONObject>): Boolean = try {
         if (!dir.exists()) dir.mkdirs()
         cleanStaleTmpLocked()
-        val open = openBatchLocked() ?: newOpenBatchLocked()
-        // A previous append can have died mid-write (ENOSPC/EIO) leaving a torn final line; without this
-        // separator the next record would fuse onto it and both would be rejected server-side.
-        sealTornTailLocked(open)
-        open.appendText(records.joinToString(separator = "\n", postfix = "\n") { it.toString() }, Charsets.UTF_8)
-        if (lineCountLocked(open) >= BATCH_RECORDS) open.renameTo(closedNameOf(open))
+        var remaining = records
+        while (remaining.isNotEmpty()) {
+            val open = openBatchLocked() ?: newOpenBatchLocked()
+            // A previous append can have died mid-write (ENOSPC/EIO) leaving a torn final line; without this
+            // separator the next record would fuse onto it and both would be rejected server-side.
+            sealTornTailLocked(open)
+            // Fill the open batch to the limit, close it, carry the remainder into a fresh batch —
+            // a closed batch never exceeds BATCH_RECORDS no matter how large one append was.
+            val capacity = BATCH_RECORDS - lineCountLocked(open)
+            val head = remaining.take(capacity)
+            remaining = remaining.drop(capacity)
+            open.appendText(head.joinToString(separator = "\n", postfix = "\n") { it.toString() }, Charsets.UTF_8)
+            if (lineCountLocked(open) >= BATCH_RECORDS) open.renameTo(closedNameOf(open))
+        }
         enforceCapLocked()
         true
     } catch (_: IOException) {

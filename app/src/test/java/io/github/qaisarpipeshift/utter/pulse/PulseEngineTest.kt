@@ -212,7 +212,7 @@ class PulseEngineTest {
         engine().onTrigger(PulseEngine.TRIGGER_APP_OPENED)
 
         assertEquals(2, server.requestCount)
-        assertEquals(listOf("a", "c"), closedBatchLines().single()) // big dropped, the rest kept
+        assertEquals(listOf("a", "c"), closedBatchLines().single().map { JSONObject(it).getString("id") }) // big dropped
 
         now += 15 * 60_000 + 1 // the failed push waits out the interval before retrying
         server.enqueue(MockResponse().setBody("""{"accepted":2,"duplicates":1}"""))
@@ -312,9 +312,10 @@ class PulseEngineTest {
 
         engine().onTrigger(PulseEngine.TRIGGER_APP_OPENED)
 
-        val first = server.takeRequest()!!.body?.readByteArray()!!.decodeToString()
-        assertTrue(first.contains("\"id\":\"old\""))
-        assertFalse(first.contains("\"id\":\"new\""))
+        val first = server.takeRequest()!!.body?.readByteArray() ?: ByteArray(0)
+        val text = GZIPInputStream(ByteArrayInputStream(first)).use { it.readBytes().decodeToString() }
+        assertTrue(text.contains("\"id\":\"old\""))
+        assertFalse(text.contains("\"id\":\"new\""))
     }
 
     @Test
