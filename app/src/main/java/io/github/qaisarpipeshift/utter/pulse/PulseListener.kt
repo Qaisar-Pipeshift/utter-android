@@ -4,8 +4,8 @@ import android.app.Notification
 import android.os.Build
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
-import android.service.notification.Ranking
-import android.service.notification.RankingMap
+import android.service.notification.NotificationListenerService.Ranking
+import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import io.github.qaisarpipeshift.utter.Graph
