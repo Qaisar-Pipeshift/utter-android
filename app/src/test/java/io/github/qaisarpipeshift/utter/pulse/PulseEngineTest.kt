@@ -106,12 +106,12 @@ class PulseEngineTest {
     }
 
     @Test
-    fun `below android 15 the engine is inert`() = runBlocking {
+    fun `below android 10 the engine is inert`() = runBlocking {
         store.append(listOf(record("a")))
         store.closeBatch()
         val inert = PulseEngine(
             store, sampler(), Api(Http(OkHttpClient(), allowCleartext = true)) { ServerConfig("http://x/", "k") },
-            { settings }, { true }, Diag(), { now }, sdkInt = { 34 },
+            { settings }, { true }, Diag(), { now }, sdkInt = { 28 },
         )
 
         inert.onTrigger(PulseEngine.TRIGGER_APP_OPENED)

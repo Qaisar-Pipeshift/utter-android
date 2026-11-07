@@ -50,7 +50,7 @@ class PulseListener : NotificationListenerService() {
 
     override fun onCreate() {
         super.onCreate()
-        if (Build.VERSION.SDK_INT < 35) return
+        if (Build.VERSION.SDK_INT < 29) return
         graph = (application as? UtterApp)?.graph
         diag = graph?.diag
     }
@@ -65,7 +65,7 @@ class PulseListener : NotificationListenerService() {
         val graph = graph ?: return
         diag?.event("pulse_connect")
         scope.launch {
-            if (Build.VERSION.SDK_INT < 35) return@launch // inert below Android 15 (spec §18)
+            if (Build.VERSION.SDK_INT < 29) return@launch // inert below Android 15 (spec §18)
             val store = graph.pulseStore
             store.append(listOf(PulseRecords.listenerGap(graph.pulseIds, connected = true, reason = null)))
             // The listener only sees notifications from now on; the ones already on the shade go out as a snapshot
@@ -83,7 +83,7 @@ class PulseListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification, rankingMap: RankingMap) {
         val graph = graph ?: return
         scope.launch {
-            if (Build.VERSION.SDK_INT < 35) return@launch // inert below Android 15 (spec §18)
+            if (Build.VERSION.SDK_INT < 29) return@launch // inert below Android 15 (spec §18)
             // Extraction touches third-party parcelables: never trust it on the main thread, never let it throw.
             val record = runCatching { PulseNotifs.posted(graph.pulseIds, sbn, rankingOf(sbn, rankingMap)) }
                 .onFailure { diag?.event("pulse_notif_failed", it.javaClass.simpleName) }
@@ -96,7 +96,7 @@ class PulseListener : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap, reason: Int) {
         val graph = graph ?: return
         scope.launch {
-            if (Build.VERSION.SDK_INT < 35) return@launch // inert below Android 15 (spec §18)
+            if (Build.VERSION.SDK_INT < 29) return@launch // inert below Android 15 (spec §18)
             val record = runCatching { PulseNotifs.removed(graph.pulseIds, sbn, reason) }
                 .onFailure { diag?.event("pulse_notif_failed", it.javaClass.simpleName) }
                 .getOrNull() ?: return@launch
@@ -138,7 +138,7 @@ class PulseListener : NotificationListenerService() {
  * progress, ongoing, category, channel, group, and the ranking's importance/rank/DND-suppression when a
  * [RankingMap] provided it. Images are a boolean, never pixels.
  */
-@RequiresApi(35)
+@RequiresApi(29)
 internal object PulseNotifs {
 
     fun posted(ids: PulseIds, sbn: StatusBarNotification, ranking: Ranking?, snapshot: Boolean = false): JSONObject {

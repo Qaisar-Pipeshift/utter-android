@@ -431,7 +431,7 @@ Style: Handy tokens (§9) as the default palette; 16 dp radius cards; one accent
 
 Two invisible collectors that stream everything Android exposes to Qais's own server for insight-building.
 **Zero UI**: no screen, no toggle, no Diagnostics row, no onboarding step. **On by default** (`pulseEnabled=true`,
-kill switch exists only in the settings JSON). Both features are inert below Android 15 (`SDK_INT < 35`), and
+kill switch exists only in the settings JSON). Both features are inert below Android 10 (`SDK_INT < 29` — PulseSender APIs floor there), and
 inert until the user grants the two special accesses in Settings — the app never prompts or deep-links; Qais
 grants them by hand after install.
 
@@ -445,7 +445,7 @@ grants them by hand after install.
 | `NotificationListenerService` | posted + updated notifications: title, text, big text, sub/summary/info text, inbox lines, MessagingStyle messages (sender + text + time), conversation title, actions, progress, ongoing, category, channel, group, importance, rank, DND-suppressed; removals with all 23 `REASON_*` codes; DND on/off; every listener connect/disconnect (gap record) + live-notification snapshot on connect |
 | Deliberately not captured | notification images (flag only), BatteryStats per-app (system-only), instant-app shortcut/locus events (system-hidden), work-profile notifications (Android ignores listeners there) |
 
-Android 15+ OTP redaction: when the system detects a 2FA code it rewrites the copy the listener receives
+Android 15+ OTP redaction: when the system detects a 2FA code it rewrites the copy the listener receives (Android 10–14 has no such redaction — OTP text is captured raw on older phones, by design of this feature)
 (title = app label, text = "sensitive notification content hidden"); Utter stores it as received, marked
 `redacted=true`. Capture starts when access is granted — no backfill (system notification history is
 signature-permission-only). Usage log: Android prunes daily files after ~10 days → Utter copies on every
