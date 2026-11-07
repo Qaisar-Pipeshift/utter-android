@@ -9,6 +9,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.os.Build
 import androidx.annotation.RequiresApi
+import io.github.qaisarpipeshift.utter.core.PulseDaily
 import io.github.qaisarpipeshift.utter.core.PulseEventNames
 import io.github.qaisarpipeshift.utter.core.PulseIds
 import io.github.qaisarpipeshift.utter.core.PulseRecords
@@ -95,7 +96,13 @@ class PulseSampler(
         return out to if (last >= 0) last + 1 else cursor
     }
 
-    /** Per-app foreground/visible time for the closed days not yet emitted. */
+    /**
+     * Per-app foreground/visible time for the closed days not yet emitted. A day is only reported when Android's
+     * buckets for it are provably per-day and cover it whole ([PulseDaily.rollupDay]) — One UI answers stale
+     * windows with frozen multi-day buckets, and labeling those with the requested day wrote one snapshot under
+     * six day labels during the Nov 7 2026 backfill. A skipped day stays visible via Diagnostics and is retried
+     * until the 10-day clamp drops it; its event timeline is unaffected.
+     */
     private fun dailyUsage(lastDay: Long, todayEpochDay: Long, zone: ZoneId): Pair<List<JSONObject>, Long> {
         val days = PulseWindows.closedDays(lastDay, todayEpochDay)
         if (days.isEmpty()) return emptyList<JSONObject>() to lastDay
@@ -104,25 +111,39 @@ class PulseSampler(
         val out = ArrayList<JSONObject>()
         var done = lastDay
         for (day in days) {
+            val dayLabel = LocalDate.ofEpochDay(day).toString()
             val start = dayStart(day, zone)
+            val end = dayStart(day + 1, zone)
             val stats = try {
-                usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, dayStart(day + 1, zone))
+                usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
             } catch (_: SecurityException) {
                 diag?.event("pulse_sample_denied", "usage_daily")
                 return out to done
             }
             if (stats == null) return out to done // device locked: the day stays open for the next sample
+            val buckets = ArrayList<PulseDaily.Stat>(stats.size)
             for (stat in stats) {
-                out.add(
-                    PulseRecords.usageDaily(
-                        ids,
-                        LocalDate.ofEpochDay(day).toString(),
-                        stat.packageName,
-                        stat.totalTimeInForeground,
-                        stat.totalTimeVisible,
-                        stat.lastTimeUsed,
+                // firstTimeStamp/lastTimeStamp are the bucket's own interval, returned whole (never clipped to
+                // the query window) — exactly what the per-day proof needs.
+                buckets.add(
+                    PulseDaily.Stat(
+                        stat.firstTimeStamp, stat.lastTimeStamp, stat.packageName,
+                        stat.totalTimeInForeground, stat.totalTimeVisible, stat.lastTimeUsed,
                     ),
                 )
+            }
+            val rollup = PulseDaily.rollupDay(buckets, start, end)
+            if (rollup == null) {
+                // Frozen or partly-flushed buckets: emitting them would mislabel days. Skip, show, retry later.
+                diag?.event("pulse_daily_skipped", dayLabel)
+            } else {
+                for ((pkg, acc) in rollup) {
+                    val record = PulseRecords.usageDaily(ids, dayLabel, pkg, acc[0], acc[1], acc[2])
+                    // Stable per (day, pkg): the same aggregate re-observed on a later flush dedupes server-side
+                    // instead of piling up as fresh ids, and a changed total only ever means a genuinely new value.
+                    record.put("id", ids.stable("daily:$dayLabel:$pkg"))
+                    out.add(record)
+                }
             }
             done = day
         }

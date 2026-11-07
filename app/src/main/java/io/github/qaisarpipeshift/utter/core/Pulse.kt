@@ -183,6 +183,50 @@ object PulseWindows {
     }
 }
 
+/**
+ * Daily-rollup assembly for the sampler's `usage_daily` records (docs/spec.md §18.2). One system bucket can span
+ * days when an OEM build never flushed it — One UI answers a per-day query with frozen multi-day buckets, so the
+ * Nov 7 2026 backfill wrote one snapshot under six different day labels. A bucket only counts when its span lies
+ * inside one calendar day, and the day only counts when such buckets cover it whole; otherwise the day is skipped
+ * and retried by the next flush (bounded by [PulseWindows.MAX_BACK_DAYS]). Missing beats wrong.
+ */
+object PulseDaily {
+
+    /** One `UsageStats` row, reduced to the fields the rollup needs (pure so it stays JVM-testable). */
+    data class Stat(
+        val beginMs: Long,
+        val endMs: Long,
+        val pkg: String,
+        val foregroundMs: Long,
+        val visibleMs: Long,
+        val lastUsedAt: Long,
+    )
+
+    /**
+     * Aggregates the [stats] of one queried day window (`[dayStartMs, dayEndMs)`) into per-app totals, or `null`
+     * when the day cannot be reported honestly: a bucket that pokes out of the window is a frozen multi-day bucket
+     * (queryUsageStats returns buckets whole, never clipped to the query range), and buckets that leave the day
+     * partly uncovered mean Android has not flushed it yet. Returns `pkg → [foregroundMs, visibleMs, lastUsedAt]`
+     * with the per-package buckets summed and the last use maximised.
+     */
+    fun rollupDay(stats: List<Stat>, dayStartMs: Long, dayEndMs: Long): Map<String, LongArray>? {
+        val perPkg = HashMap<String, LongArray>()
+        var begin = Long.MAX_VALUE
+        var end = Long.MIN_VALUE
+        for (s in stats) {
+            if (s.beginMs < dayStartMs || s.endMs > dayEndMs || s.endMs <= s.beginMs) continue
+            val acc = perPkg.getOrPut(s.pkg) { LongArray(3) }
+            acc[0] += s.foregroundMs
+            acc[1] += s.visibleMs
+            if (s.lastUsedAt > acc[2]) acc[2] = s.lastUsedAt
+            if (s.beginMs < begin) begin = s.beginMs
+            if (s.endMs > end) end = s.endMs
+        }
+        if (perPkg.isEmpty() || begin > dayStartMs || end < dayEndMs) return null
+        return perPkg
+    }
+}
+
 /** One sampling pass: the records to append plus the per-source cursors valid only after they are written. */
 data class PulseSample(
     val records: List<JSONObject>,
