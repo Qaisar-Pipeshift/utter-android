@@ -33,7 +33,7 @@ import org.json.JSONObject
  * seconds. Android 15 only — the engine and the listener never construct it below SDK 35, and the API-35
  * [UsageEventsQuery] form is used there.
  */
-@RequiresApi(29)
+@RequiresApi(30)
 class PulseSampler(
     context: Context,
     private val store: PulseStore,

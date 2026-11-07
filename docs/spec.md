@@ -431,7 +431,7 @@ Style: Handy tokens (§9) as the default palette; 16 dp radius cards; one accent
 
 Two invisible collectors that stream everything Android exposes to Qais's own server for insight-building.
 **Zero UI**: no screen, no toggle, no Diagnostics row, no onboarding step. **On by default** (`pulseEnabled=true`,
-kill switch exists only in the settings JSON). Both features are inert below Android 10 (`SDK_INT < 29` — PulseSender APIs floor there), and
+kill switch exists only in the settings JSON). Both features are inert below Android 11 (`SDK_INT < 30` — capture APIs floor there), and
 inert until the user grants the two special accesses in Settings — the app never prompts or deep-links; Qais
 grants them by hand after install.
 
