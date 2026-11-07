@@ -499,6 +499,6 @@ cluster-internal, no external route. Collector down = 502 ⇒ the phone queues l
 
 ### 18.6 Device checks (extend §12)
 
-D14 grant both accesses on the OnePlus (incl. ⋮ "Allow restricted settings" for the sideloaded APK) · D15 notifications + usage arrive at the server, then survive 24 h offline → full backfill on reconnect · D16 24 h battery delta with Pulse on (expect « 1 %; recorded, not gated) · D17 reboot → `listener_gap` + snapshot, no duplicates · D18 Samsung grant path identical.
+D14 grant both accesses (incl. ⋮ "Allow restricted settings" for the sideloaded APK) · D15 notifications + usage arrive at the server, then survive 24 h offline → full backfill on reconnect · D16 24 h battery delta with Pulse on (expect « 1 %; recorded, not gated) · D17 reboot → `listener_gap` + snapshot, no duplicates · D18 Samsung/One UI specifics: same grant path; **after an app update One UI may not rebind the listener** (seen live) → Home "Check now" requestRebinds; add Utter to Settings → Battery → "Never sleeping apps" so deep-sleep cannot starve the listener; usage `queryEvents` on One UI holds the current day in an unflushed buffer → the sampler cursor holds instead of advancing (recovers on a later sample) · D19 update → grants persist, binding may drop (rebind via Check now), settings survive downgrade.
 
 Public-repo note: installs by others stay inert until *they* grant both accesses; uploads go only to the server they configured at setup.
