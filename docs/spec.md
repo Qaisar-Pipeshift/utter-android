@@ -431,7 +431,7 @@ Style: Handy tokens (§9) as the default palette; 16 dp radius cards; one accent
 
 Two invisible collectors that stream everything Android exposes to Qais's own server for insight-building.
 **Zero UI**: no screen, no toggle, no Diagnostics row, no onboarding step. **On by default** (`pulseEnabled=true`,
-kill switch exists only in the settings JSON). Both features are inert below Android 15 (`SDK_INT < 35`), and
+kill switch exists only in the settings JSON). Both features are inert below Android 11 (`SDK_INT < 30` — capture APIs floor there), and
 inert until the user grants the two special accesses in Settings — the app never prompts or deep-links; Qais
 grants them by hand after install.
 
@@ -445,7 +445,7 @@ grants them by hand after install.
 | `NotificationListenerService` | posted + updated notifications: title, text, big text, sub/summary/info text, inbox lines, MessagingStyle messages (sender + text + time), conversation title, actions, progress, ongoing, category, channel, group, importance, rank, DND-suppressed; removals with all 23 `REASON_*` codes; DND on/off; every listener connect/disconnect (gap record) + live-notification snapshot on connect |
 | Deliberately not captured | notification images (flag only), BatteryStats per-app (system-only), instant-app shortcut/locus events (system-hidden), work-profile notifications (Android ignores listeners there) |
 
-Android 15+ OTP redaction: when the system detects a 2FA code it rewrites the copy the listener receives
+Android 15+ OTP redaction: when the system detects a 2FA code it rewrites the copy the listener receives (Android 10–14 has no such redaction — OTP text is captured raw on older phones, by design of this feature)
 (title = app label, text = "sensitive notification content hidden"); Utter stores it as received, marked
 `redacted=true`. Capture starts when access is granted — no backfill (system notification history is
 signature-permission-only). Usage log: Android prunes daily files after ~10 days → Utter copies on every
@@ -459,7 +459,7 @@ trigger (cursor only advances after a successful local write).
         ├─► UsageStats+NetworkStats sample since cursor ┘
         └─► push closed batches (gzip NDJSON), oldest first ── 2xx → delete · fail → keep
  triggers (no alarms, no jobs, no wakeups): notification received · take finished ·
-   app opened · listener connected (post-boot). Wi-Fi-only and interval are JSON-only settings.
+   app opened · listener connected (post-boot). Wi-Fi-only and interval are JSON-only settings; interval default 5 min.
 ```
 
 | Rule | Value |
@@ -485,7 +485,7 @@ cluster-internal, no external route. Collector down = 502 ⇒ the phone queues l
 |---|---|
 | `pulse.PulseListener` (`NotificationListenerService`) + `BIND_NOTIFICATION_LISTENER_SERVICE` | `check_manifest.py` services allowlist + this; `check_battery_rules.py` whitelists the NLS class (event-driven, no polling) |
 | `PACKAGE_USAGE_STATS` (`tools:ignore=ProtectedPermissions`) — `QUERY_ALL_PACKAGES` dropped: the app never resolves other apps' labels, insights use raw package names | `check_manifest.py` + `check_merged_manifest.py` allowlists |
-| Settings: `pulseEnabled=true`, `pulseMinIntervalMin=15`, `pulseWifiOnly=false`, `pulseStoreCapMb=100` | JSON-only; no UI anywhere |
+| Settings: `pulseEnabled=true`, `pulseMinIntervalMin=5`, `pulseWifiOnly=false`, `pulseStoreCapMb=100` | JSON-only; no UI anywhere |
 
 ### 18.5 Update / rollback compatibility (decided 2026-11-06)
 
@@ -499,6 +499,6 @@ cluster-internal, no external route. Collector down = 502 ⇒ the phone queues l
 
 ### 18.6 Device checks (extend §12)
 
-D14 grant both accesses on the OnePlus (incl. ⋮ "Allow restricted settings" for the sideloaded APK) · D15 notifications + usage arrive at the server, then survive 24 h offline → full backfill on reconnect · D16 24 h battery delta with Pulse on (expect « 1 %; recorded, not gated) · D17 reboot → `listener_gap` + snapshot, no duplicates · D18 Samsung grant path identical.
+D14 grant both accesses (incl. ⋮ "Allow restricted settings" for the sideloaded APK) · D15 notifications + usage arrive at the server, then survive 24 h offline → full backfill on reconnect · D16 24 h battery delta with Pulse on (expect « 1 %; recorded, not gated) · D17 reboot → `listener_gap` + snapshot, no duplicates · D18 Samsung/One UI specifics: same grant path; **after an app update One UI may not rebind the listener** (seen live) → Home "Check now" requestRebinds; add Utter to Settings → Battery → "Never sleeping apps" so deep-sleep cannot starve the listener; usage `queryEvents` on One UI holds the current day in an unflushed buffer → the sampler cursor holds instead of advancing (recovers on a later sample) · D19 update → grants persist, binding may drop (rebind via Check now), settings survive downgrade.
 
 Public-repo note: installs by others stay inert until *they* grant both accesses; uploads go only to the server they configured at setup.

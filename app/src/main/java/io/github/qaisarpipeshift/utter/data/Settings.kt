@@ -78,7 +78,7 @@ data class Settings(
     val prewarm: Boolean = true,
     // Pulse (docs/spec.md §18): JSON-only by explicit decision — no screen, no toggle, no Diagnostics row.
     val pulseEnabled: Boolean = true,
-    val pulseMinIntervalMin: Int = 15,
+    val pulseMinIntervalMin: Int = 5,
     val pulseWifiOnly: Boolean = false,
     val pulseStoreCapMb: Int = 100,
 )

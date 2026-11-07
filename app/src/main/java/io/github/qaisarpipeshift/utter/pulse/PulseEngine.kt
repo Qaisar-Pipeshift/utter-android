@@ -38,7 +38,7 @@ class PulseEngine(
     /** One opportunistic flush for [trigger]; returns quickly when Pulse is off or the platform is older than 15. */
     suspend fun onTrigger(trigger: String) {
         if (!settings().pulseEnabled) return
-        if (sdkInt() < 35) return
+        if (sdkInt() < 30) return
         mutex.withLock {
             onTriggerLocked(trigger)
         }

@@ -166,7 +166,7 @@ class SettingsJsonTest {
     fun `pulse settings default to on with the documented values`() {
         val decoded = SettingsJson.decode("{}")
         assertTrue(decoded.pulseEnabled)
-        assertEquals(15, decoded.pulseMinIntervalMin)
+        assertEquals(5, decoded.pulseMinIntervalMin)
         assertFalse(decoded.pulseWifiOnly)
         assertEquals(100, decoded.pulseStoreCapMb)
     }
@@ -191,7 +191,7 @@ class SettingsJsonTest {
         assertEquals(400, decoded.holdThresholdMs)
         assertEquals(ThemeMode.DARK, decoded.theme)
         assertTrue(decoded.pulseEnabled)
-        assertEquals(15, decoded.pulseMinIntervalMin)
+        assertEquals(5, decoded.pulseMinIntervalMin)
         assertFalse(decoded.pulseWifiOnly)
         assertEquals(100, decoded.pulseStoreCapMb)
     }

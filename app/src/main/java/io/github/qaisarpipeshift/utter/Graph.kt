@@ -147,7 +147,7 @@ class Graph(app: Context) {
     val pulse: PulseEngine by lazy {
         PulseEngine(
             store = pulseStore,
-            sampler = if (Build.VERSION.SDK_INT >= 35) {
+            sampler = if (Build.VERSION.SDK_INT >= 30) {
                 PulseSampler(appContext, pulseStore, pulseIds, diag)
             } else {
                 PulseSampling { PulseSample(emptyList(), 0, 0, 0) }
