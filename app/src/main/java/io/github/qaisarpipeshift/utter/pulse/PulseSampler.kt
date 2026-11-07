@@ -57,10 +57,15 @@ class PulseSampler(
         PulseSample(events + usageRecords + netRecords, usageCursor, dailyDay, netDay)
     }
 
-    /** Every event in `(cursor, now]`, nothing filtered; the cursor moves to [now] even for an empty batch. */
+    /**
+     * Every event in `(cursor, now]`, nothing filtered. The cursor moves to the last event seen (+1) and only
+     * when events were returned: several OEM builds (One UI included) hold the current day's events in a buffer
+     * that queryEvents does not expose until it flushes, so advancing to [now] on an empty result would skip
+     * those events permanently. An idle log keeps the cursor where it is; the 10-day clamp bounds re-queries.
+     */
     private fun usageEvents(cursor: Long, now: Long): Pair<List<JSONObject>, Long> {
         if (now <= cursor) return emptyList<JSONObject>() to cursor
-        val begin = if (cursor <= 0) now - LOOKBACK_MS else cursor
+        val begin = maxOf(cursor, now - LOOKBACK_MS)
         val usm = appContext.getSystemService(UsageStatsManager::class.java)
             ?: return emptyList<JSONObject>() to cursor
         val events = try {
@@ -77,6 +82,7 @@ class PulseSampler(
         if (events == null) return emptyList<JSONObject>() to cursor // device locked (docs note)
         val out = ArrayList<JSONObject>()
         val event = UsageEvents.Event()
+        var last = -1L
         while (events.hasNextEvent()) {
             if (!events.getNextEvent(event)) break
             val type = event.eventType
@@ -84,8 +90,9 @@ class PulseSampler(
             out.add(
                 PulseRecords.usageEvent(ids, event.timeStamp, type, event.packageName, event.className, bucket),
             )
+            if (event.timeStamp > last) last = event.timeStamp
         }
-        return out to now
+        return out to if (last >= 0) last + 1 else cursor
     }
 
     /** Per-app foreground/visible time for the closed days not yet emitted. */
