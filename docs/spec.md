@@ -459,7 +459,7 @@ trigger (cursor only advances after a successful local write).
         ├─► UsageStats+NetworkStats sample since cursor ┘
         └─► push closed batches (gzip NDJSON), oldest first ── 2xx → delete · fail → keep
  triggers (no alarms, no jobs, no wakeups): notification received · take finished ·
-   app opened · listener connected (post-boot). Wi-Fi-only and interval are JSON-only settings.
+   app opened · listener connected (post-boot). Wi-Fi-only and interval are JSON-only settings; interval default 5 min.
 ```
 
 | Rule | Value |
@@ -485,7 +485,7 @@ cluster-internal, no external route. Collector down = 502 ⇒ the phone queues l
 |---|---|
 | `pulse.PulseListener` (`NotificationListenerService`) + `BIND_NOTIFICATION_LISTENER_SERVICE` | `check_manifest.py` services allowlist + this; `check_battery_rules.py` whitelists the NLS class (event-driven, no polling) |
 | `PACKAGE_USAGE_STATS` (`tools:ignore=ProtectedPermissions`) — `QUERY_ALL_PACKAGES` dropped: the app never resolves other apps' labels, insights use raw package names | `check_manifest.py` + `check_merged_manifest.py` allowlists |
-| Settings: `pulseEnabled=true`, `pulseMinIntervalMin=15`, `pulseWifiOnly=false`, `pulseStoreCapMb=100` | JSON-only; no UI anywhere |
+| Settings: `pulseEnabled=true`, `pulseMinIntervalMin=5`, `pulseWifiOnly=false`, `pulseStoreCapMb=100` | JSON-only; no UI anywhere |
 
 ### 18.5 Update / rollback compatibility (decided 2026-11-06)
 

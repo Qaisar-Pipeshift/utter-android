@@ -141,7 +141,7 @@ object SettingsJson {
             onboardingDone = root.bool("onboardingDone", false),
             prewarm = root.bool("prewarm", true),
             pulseEnabled = root.bool("pulseEnabled", true),
-            pulseMinIntervalMin = root.int("pulseMinIntervalMin", 15).coerceIn(1, 1440),
+            pulseMinIntervalMin = root.int("pulseMinIntervalMin", 5).coerceIn(1, 1440),
             pulseWifiOnly = root.bool("pulseWifiOnly", false),
             pulseStoreCapMb = root.int("pulseStoreCapMb", 100).coerceIn(1, 1024),
         )
