@@ -455,7 +455,7 @@ trigger (cursor only advances after a successful local write).
 
 ```
  notification posted/removed (system bind) ──► PulseStore (files/, JSONL per batch, capped 100 MB)
-        │ throttle ≥ 15 min since last sample           │
+        │ throttle ≥ interval (default 5 min)           │
         ├─► UsageStats+NetworkStats sample since cursor ┘
         └─► push closed batches (gzip NDJSON), oldest first ── 2xx → delete · fail → keep
  triggers (no alarms, no jobs, no wakeups): notification received · take finished ·

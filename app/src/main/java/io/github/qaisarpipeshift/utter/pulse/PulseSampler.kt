@@ -31,8 +31,8 @@ import org.json.JSONObject
  * a denied access or a locked device yields an empty sample and keeps the cursor, never an error.
  *
  * Called at most every `pulseMinIntervalMin` (the engine's throttle) on the IO dispatcher: `querySummary` may take
- * seconds. Android 15 only — the engine and the listener never construct it below SDK 35, and the API-35
- * [UsageEventsQuery] form is used there.
+ * seconds. Runs on Android 10+ — the engine and the listener never construct it below SDK 30 (the pulse floor,
+ * set by the MessagingStyle payload), and the API-35 [UsageEventsQuery] form is guarded there.
  */
 @RequiresApi(30)
 class PulseSampler(
