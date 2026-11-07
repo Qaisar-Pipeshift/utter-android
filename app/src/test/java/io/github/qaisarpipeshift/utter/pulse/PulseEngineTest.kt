@@ -246,6 +246,7 @@ class PulseEngineTest {
 
     @Test
     fun `a failed push waits out the interval instead of retrying per notification`() = runBlocking {
+        settings = settings.copy(pulseMinIntervalMin = 15) // pinned so the wall-clock advances below stay meaningful
         store.append(listOf(record("a")))
         store.closeBatch()
         server.enqueue(MockResponse().setResponseCode(500))
